@@ -1,0 +1,133 @@
+// Contract elements should be laid out in the following order:
+// Pragma statements
+// Import statements
+// Events
+// Errors
+// Interfaces
+// Libraries
+// Contracts
+
+// Inside each contract, library or interface, use the following order:
+// Type declarations
+// State variables
+// Events
+// Errors
+// Modifiers
+// Functions
+
+// Functions should be grouped according to their visibility and ordered:
+// constructor
+// receive function (if exists)
+// fallback function (if exists)
+// external
+// public
+// internal
+// private
+
+// SPDX-License-Identifier: SEE LICENSE IN LICENSE
+pragma solidity ^0.8.18;
+
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
+contract Payroll is Ownable {
+    // Type declarations
+    struct Employee {
+        address employeeAddress;
+        uint256 salary;
+    }
+
+    // State variables
+    IERC20 private immutable i_stablecoin;
+    Employee[] private s_employees;
+    mapping(address => uint256) private s_employeeAddressToIndex;
+    mapping(address => bool) private s_employeeAddressToExistence;
+    uint256 private s_totalSalaries;
+
+    // Events
+    event NewEmployeeAdded(address indexed employee, uint256 salary);
+    event EmployeeRemoved(address indexed employee);
+
+    // Errors
+    error Payroll__EmployeeAlreadyExists();
+    error Payroll__InvalidAddress();
+    error Payroll__SalaryMustBeGreaterThanZero();
+    error Payroll__EmployeeDoesNotExist();
+
+    constructor(IERC20 stablecoin) Ownable(msg.sender) {
+        i_stablecoin = stablecoin;
+    }
+
+    function addEmployee(
+        address employeeAddress,
+        uint256 salary
+    ) external onlyOwner {
+        // Check if the employee already exists
+        if (s_employeeAddressToExistence[employeeAddress]) {
+            revert Payroll__EmployeeAlreadyExists();
+        }
+        // Check if employeeAddress is address(0)
+        if (employeeAddress == address(0)) {
+            revert Payroll__InvalidAddress();
+        }
+        // Check if salary equals 0
+        if (salary == 0) {
+            revert Payroll__SalaryMustBeGreaterThanZero();
+        }
+
+        // Add new employee to the table
+        Employee memory newEmployee = Employee(employeeAddress, salary);
+        s_employees.push(newEmployee);
+
+        // Map the employee's address to index in the table
+        s_employeeAddressToIndex[employeeAddress] = s_employees.length - 1;
+
+        // Map existence
+        s_employeeAddressToExistence[employeeAddress] = true;
+
+        // Add employee's salary to total salaries
+        s_totalSalaries += salary;
+
+        emit NewEmployeeAdded(newEmployee.employeeAddress, newEmployee.salary);
+    }
+
+    function removeEmployee(address employeeAddress) external onlyOwner {
+        // Check if the employee exists
+        if (!s_employeeAddressToExistence[employeeAddress]) {
+            revert Payroll__EmployeeDoesNotExist();
+        }
+
+        uint256 employeeIndex = s_employeeAddressToIndex[employeeAddress];
+        uint256 lastIndex = s_employees.length - 1;
+        Employee memory employeeToRemove = s_employees[employeeIndex];
+        Employee memory lastEmployee = s_employees[lastIndex];
+
+        // Substract the salary from total salaries
+        s_totalSalaries -= s_employees[employeeIndex].salary;
+
+        // Swap-and-pop (For O(1)) while updating last employee address
+        if (employeeIndex != lastIndex) {
+            s_employees[employeeIndex] = lastEmployee;
+            s_employeeAddressToIndex[
+                lastEmployee.employeeAddress
+            ] = employeeIndex;
+        }
+        s_employees.pop();
+
+        // Delete removed index
+        delete s_employeeAddressToIndex[employeeAddress];
+
+        // Clear existence
+        delete (s_employeeAddressToExistence[employeeAddress]);
+
+        emit EmployeeRemoved(employeeToRemove.employeeAddress);
+    }
+
+    function deposit() public {}
+
+    function withdraw() public {}
+
+    function runPayroll() public {}
+
+    // Getter functions
+}
