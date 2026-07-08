@@ -56,12 +56,55 @@ contract PayrollTest is Test {
     }
 
     function testRevertsWhenSalaryIsZero() public {
-        // arrange
+        // Arrange
         vm.prank(owner);
 
         // Act / Assert
         vm.expectRevert(Payroll__SalaryMustBeGreaterThanZero.selector);
         payroll.addEmployee(ALICE, 0);
+    }
+
+    function testEmployeeAddsToArray() public {
+        // Arrange
+        vm.startPrank(owner);
+
+        // Act
+        payroll.addEmployee(ALICE, SALARY_1);
+
+        // Assert
+        assertEq(payroll.getAllEmployees().length, 1);
+        assertEq(payroll.getAllEmployees()[0].employeeAddress, ALICE);
+        vm.stopPrank();
+    }
+
+    function testUpdatesMappings() public {
+        // Arrange
+        vm.startPrank(owner);
+
+        // Act
+        payroll.addEmployee(ALICE, SALARY_1);
+
+        // Assert
+        assertEq(payroll.getEmployeeIndex(ALICE), 0);
+        assertEq(payroll.getEmployeeExistence(ALICE), true);
+        vm.stopPrank();
+    }
+
+    function testSalaryAddsToTotalSalaries() public {
+        // Arrange
+        vm.prank(owner);
+        uint256 startingTotalSalaries = payroll.getTotalSalaries();
+
+        // Act
+        vm.prank(owner);
+        payroll.addEmployee(ALICE, SALARY_1);
+
+        // Assert
+        vm.prank(owner);
+        uint256 endingTotalSalaries = payroll.getTotalSalaries();
+
+        assertEq(startingTotalSalaries, 0);
+        assertEq(endingTotalSalaries, SALARY_1);
     }
 
     /******************************************************************************

@@ -129,5 +129,29 @@ contract Payroll is Ownable {
 
     function runPayroll() public {}
 
-    // Getter functions
+    /* Getter functions */
+    function getAllEmployees()
+        external
+        view
+        onlyOwner
+        returns (Employee[] memory)
+    {
+        return s_employees;
+    }
+
+    function getEmployeeIndex(
+        address employeeAddress
+    ) external view onlyOwner returns (uint256) {
+        return s_employeeAddressToIndex[employeeAddress];
+    }
+
+    function getEmployeeExistence(
+        address employeeAddress
+    ) external view onlyOwner returns (bool) {
+        return s_employeeAddressToExistence[employeeAddress];
+    }
+
+    function getTotalSalaries() external view onlyOwner returns (uint256) {
+        return s_totalSalaries;
+    }
 }
