@@ -20,6 +20,9 @@ contract PayrollTest is Test {
     address public BOB = makeAddr("bob");
     uint256 public constant SALARY_4 = 9_000 * 1e6;
 
+    /* Events */
+    event NewEmployeeAdded(address indexed employee, uint256 salary);
+
     /* Errors */
     error Payroll__EmployeeAlreadyExists();
     error Payroll__InvalidAddress();
@@ -107,6 +110,30 @@ contract PayrollTest is Test {
         assertEq(endingTotalSalaries, SALARY_1);
     }
 
+    function testAddingEmployeeEmits() public {
+        // Arrange
+        vm.prank(owner);
+
+        // Act / Assert
+        vm.expectEmit(true, false, false, true, address(payroll));
+        emit NewEmployeeAdded(ALICE, SALARY_1);
+        payroll.addEmployee(ALICE, SALARY_1);
+    }
+
+    function testOnlyOwnerCanAddEmployee() public {
+        // First we try to add an employee using ALICE, it should revert
+        // Arrange
+        vm.prank(ALICE);
+
+        // Act / Assert
+        vm.expectRevert();
+        payroll.addEmployee(BOB, SALARY_4);
+
+        // Then we add an employee using the owner.
+        vm.prank(owner);
+        payroll.addEmployee(BOB, SALARY_4);
+    }
+
     /******************************************************************************
      *                              REMOVE EMPLOYEE                               *
      ******************************************************************************/
@@ -117,5 +144,20 @@ contract PayrollTest is Test {
         // Act / Assert
         vm.expectRevert(Payroll__EmployeeDoesNotExist.selector);
         payroll.removeEmployee(ALICE);
+    }
+
+    function testOnlyOwnerCanRemoveEmployee() public {
+        // Arrange
+        vm.prank(owner);
+        payroll.addEmployee(BOB, SALARY_4);
+
+        // We try to remove BOB using ALICE, it should revert
+        vm.prank(ALICE);
+        vm.expectRevert();
+        payroll.removeEmployee(BOB);
+
+        // We remove BOB using the owner.
+        vm.prank(owner);
+        payroll.removeEmployee(BOB);
     }
 }
