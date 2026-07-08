@@ -6,7 +6,7 @@ import {Payroll} from "src/Payroll.sol";
 import {MockUSDC} from "test/mock/MockUSDC.sol";
 
 contract DeployPayroll is Script {
-    uint256 public constant INITIAL_SUPPLY = 1e24;
+    uint256 public constant INITIAL_SUPPLY = 1_000_000 * 1e6;
 
     function run() external returns (Payroll, MockUSDC) {
         return deployContract();

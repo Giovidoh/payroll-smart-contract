@@ -131,6 +131,7 @@ Fund management (`deposit`, `withdraw`) and payroll execution (`runPayroll`) are
 ## Roadmap
 
 - [x] Employee management — `addEmployee`, `removeEmployee` (gas-efficient array + mapping storage, swap-and-pop removal)
+- [-] Test employee management
 - [ ] `updateEmployee` — update an existing employee's salary and/or address
 - [ ] Fund management — `deposit`, `withdraw` (ERC-20 stablecoin)
 - [ ] Payroll execution — `runPayroll`
