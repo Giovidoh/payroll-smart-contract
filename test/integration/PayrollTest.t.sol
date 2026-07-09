@@ -141,6 +141,88 @@ contract PayrollTest is Test {
         payroll.removeEmployee(ALICE);
     }
 
+    modifier addMultipleEmployees() {
+        vm.startPrank(owner);
+        payroll.addEmployee(ALICE, SALARY_1);
+        payroll.addEmployee(DAVE, SALARY_2);
+        payroll.addEmployee(CAROL, SALARY_3);
+        payroll.addEmployee(BOB, SALARY_4);
+        vm.stopPrank();
+        _;
+    }
+
+    function testRemovesFirstEmployeeWhenMultipleExist()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(owner);
+
+        // Act
+        payroll.removeEmployee(ALICE);
+
+        // Assert
+        assertEq(payroll.getEmployeeExistence(ALICE), false);
+        assertEq(payroll.getAllEmployees().length, 3);
+        assertEq(payroll.getAllEmployees()[0].employeeAddress, BOB);
+        assertEq(payroll.getEmployeeIndex(BOB), 0);
+
+        vm.stopPrank();
+    }
+
+    function testRemovesMiddleEmployeeWhenMultipleExist()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(owner);
+
+        // Act
+        payroll.removeEmployee(DAVE);
+
+        // Assert
+        assertEq(payroll.getEmployeeExistence(DAVE), false);
+        assertEq(payroll.getAllEmployees().length, 3);
+        assertEq(payroll.getAllEmployees()[1].employeeAddress, BOB);
+        assertEq(payroll.getEmployeeIndex(BOB), 1);
+
+        vm.stopPrank();
+    }
+
+    function testRemovesLastEmployeeWhenMultipleExist()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(owner);
+
+        // Act
+        payroll.removeEmployee(BOB);
+
+        // Assert
+        assertEq(payroll.getEmployeeExistence(BOB), false);
+        assertEq(payroll.getAllEmployees().length, 3);
+        // Confirm nobody moved — Alice, Dave, Carol stayed at their original indices
+        assertEq(payroll.getAllEmployees()[0].employeeAddress, ALICE);
+        assertEq(payroll.getAllEmployees()[1].employeeAddress, DAVE);
+        assertEq(payroll.getAllEmployees()[2].employeeAddress, CAROL);
+
+        vm.stopPrank();
+    }
+
+    function testRemovesOnlyEmployeeAndEmptiesArray() public {
+        vm.startPrank(owner);
+
+        // Arrange
+        payroll.addEmployee(ALICE, SALARY_1);
+
+        // Act
+        payroll.removeEmployee(ALICE);
+
+        // Assert
+        assertEq(payroll.getEmployeeExistence(ALICE), false);
+        assertEq(payroll.getAllEmployees().length, 0);
+
+        vm.stopPrank();
+    }
+
     function testOnlyOwnerCanRemoveEmployee() public {
         // Arrange
         vm.prank(owner);
