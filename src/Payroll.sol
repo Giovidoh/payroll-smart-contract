@@ -129,5 +129,32 @@ contract Payroll is Ownable {
 
     function runPayroll() public {}
 
-    // Getter functions
+    /* Getter functions */
+    function getAllEmployees()
+        external
+        view
+        onlyOwner
+        returns (Employee[] memory)
+    {
+        return s_employees;
+    }
+
+    // Since this is an implementation we should use stdStorage instead.
+    // But here it's restricted to owner only so no security issue.
+    // I'll update that later.
+    function getEmployeeIndex(
+        address employeeAddress
+    ) external view onlyOwner returns (uint256) {
+        return s_employeeAddressToIndex[employeeAddress];
+    }
+
+    function getEmployeeExistence(
+        address employeeAddress
+    ) external view onlyOwner returns (bool) {
+        return s_employeeAddressToExistence[employeeAddress];
+    }
+
+    function getTotalSalaries() external view onlyOwner returns (uint256) {
+        return s_totalSalaries;
+    }
 }
