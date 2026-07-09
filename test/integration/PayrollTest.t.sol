@@ -5,6 +5,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {DeployPayroll} from "script/DeployPayroll.s.sol";
 import {Payroll} from "src/Payroll.sol";
 import {MockUSDC} from "test/mock/MockUSDC.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract PayrollTest is Test {
     DeployPayroll deployer;
@@ -23,12 +24,6 @@ contract PayrollTest is Test {
     /* Events */
     event NewEmployeeAdded(address indexed employee, uint256 salary);
 
-    /* Errors */
-    error Payroll__EmployeeAlreadyExists();
-    error Payroll__InvalidAddress();
-    error Payroll__SalaryMustBeGreaterThanZero();
-    error Payroll__EmployeeDoesNotExist();
-
     function setUp() public {
         deployer = new DeployPayroll();
         (payroll, mockUSDC) = deployer.run();
@@ -44,7 +39,7 @@ contract PayrollTest is Test {
         payroll.addEmployee(ALICE, SALARY_1);
 
         // Act / Assert
-        vm.expectRevert(Payroll__EmployeeAlreadyExists.selector);
+        vm.expectRevert(Payroll.Payroll__EmployeeAlreadyExists.selector);
         vm.prank(owner);
         payroll.addEmployee(ALICE, SALARY_1);
     }
@@ -54,7 +49,7 @@ contract PayrollTest is Test {
         vm.prank(owner);
 
         // Act / Assert
-        vm.expectRevert(Payroll__InvalidAddress.selector);
+        vm.expectRevert(Payroll.Payroll__InvalidAddress.selector);
         payroll.addEmployee(address(0), SALARY_1);
     }
 
@@ -63,7 +58,7 @@ contract PayrollTest is Test {
         vm.prank(owner);
 
         // Act / Assert
-        vm.expectRevert(Payroll__SalaryMustBeGreaterThanZero.selector);
+        vm.expectRevert(Payroll.Payroll__SalaryMustBeGreaterThanZero.selector);
         payroll.addEmployee(ALICE, 0);
     }
 
@@ -142,7 +137,7 @@ contract PayrollTest is Test {
         vm.prank(owner);
 
         // Act / Assert
-        vm.expectRevert(Payroll__EmployeeDoesNotExist.selector);
+        vm.expectRevert(Payroll.Payroll__EmployeeDoesNotExist.selector);
         payroll.removeEmployee(ALICE);
     }
 
@@ -153,7 +148,12 @@ contract PayrollTest is Test {
 
         // We try to remove BOB using ALICE, it should revert
         vm.prank(ALICE);
-        vm.expectRevert();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                ALICE
+            )
+        );
         payroll.removeEmployee(BOB);
 
         // We remove BOB using the owner.
