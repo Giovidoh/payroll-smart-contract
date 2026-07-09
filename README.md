@@ -47,6 +47,7 @@
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
+    <li><a href="#testing">Testing</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
@@ -119,10 +120,42 @@ Deployment instructions (local + testnet) will be added once the contract is rea
 
 The contract owner (the employer) can currently:
 
-- Add a new employee with `addEmployee(address employeeAddress, uint256 salary)`
-- Remove an existing employee with `removeEmployee(address employeeAddress)`
+- Add a new employee — `addEmployee(address employeeAddress, uint256 salary)`
+- Remove an existing employee — `removeEmployee(address employeeAddress)`
+- View all registered employees — `getAllEmployees()`
+- View the total salaries currently owed — `getTotalSalaries()`
+- Check if an address is a registered employee — `getEmployeeExistence(address employeeAddress)`
 
-Fund management (`deposit`, `withdraw`) and payroll execution (`runPayroll`) are actively being developed — see the Roadmap below.
+Fund management (`deposit`, `withdraw`), payroll execution (`runPayroll`), and an employee-facing salary getter are actively being developed — see the Roadmap below.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<!-- TESTING -->
+
+## Testing
+
+### Run all tests
+
+```sh
+forge test
+```
+
+### Run tests with verbosity
+
+```sh
+forge test -vvv
+```
+
+### Check test coverage
+
+```sh
+forge coverage
+```
+
+Tests are organized by scope:
+
+- `test/unit/` — tests each function in isolation. Currently covers employee management (`addEmployee`, `removeEmployee`) with 18 tests, including revert conditions, state changes, event emissions, access control, and boundary cases such as removing the first, middle, last, and only employee in the array.
+- `test/integration/` — will cover multiple functions working together end-to-end (e.g. deposit → run payroll → verify payments), once fund management and payroll execution are implemented.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -131,12 +164,12 @@ Fund management (`deposit`, `withdraw`) and payroll execution (`runPayroll`) are
 ## Roadmap
 
 - [x] Employee management — `addEmployee`, `removeEmployee` (gas-efficient array + mapping storage, swap-and-pop removal)
-- [-] Test employee management
+- [x] Unit tests for employee management — 18 tests, full framework coverage (reverts, state changes, events, access control, boundaries)
 - [ ] `updateEmployee` — update an existing employee's salary and/or address
 - [ ] Fund management — `deposit`, `withdraw` (ERC-20 stablecoin)
 - [ ] Payroll execution — `runPayroll`
-- [ ] Employee-facing getters — `getEmployee`, `getAllEmployees`
-- [ ] Full Foundry test suite
+- [ ] Employee-facing getter — `getEmployee()`, viewable by the owner and the employee themselves
+- [ ] Integration test suite
 - [ ] Deployment to Sepolia testnet
 
 See the [open issues](https://github.com/Giovidoh/payroll-smart-contract/issues) for a full list of proposed features and known issues.
