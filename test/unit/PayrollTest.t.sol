@@ -23,6 +23,7 @@ contract PayrollTest is Test {
 
     /* Events */
     event NewEmployeeAdded(address indexed employee, uint256 salary);
+    event EmployeeRemoved(address indexed employee);
 
     function setUp() public {
         deployer = new DeployPayroll();
@@ -139,6 +140,72 @@ contract PayrollTest is Test {
         // Act / Assert
         vm.expectRevert(Payroll.Payroll__EmployeeDoesNotExist.selector);
         payroll.removeEmployee(ALICE);
+    }
+
+    function testSalarySubstractsFromTotalSalaries()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(owner);
+
+        // Arrange
+        uint256 startingTotalSalaries = payroll.getTotalSalaries();
+
+        // Act
+        payroll.removeEmployee(ALICE);
+
+        // Assert
+        uint256 endingTotalSalaries = payroll.getTotalSalaries();
+        assertEq(startingTotalSalaries - SALARY_1, endingTotalSalaries);
+
+        vm.stopPrank();
+    }
+
+    function testIndexMappingClearedAfterRemoval() public addMultipleEmployees {
+        vm.startPrank(owner);
+
+        // Arrange
+        uint256 startingIndex = payroll.getEmployeeIndex(BOB);
+
+        // Act
+        payroll.removeEmployee(BOB);
+
+        // Assert
+        // Since BOB's index is 3 when added, if removed it should not exist anymore
+        uint256 endingIndex = payroll.getEmployeeIndex(BOB);
+        assertEq(startingIndex, 3);
+        assertEq(endingIndex, 0);
+
+        vm.stopPrank();
+    }
+
+    function testExistenceMappingClearedAfterRemoval() public {
+        vm.startPrank(owner);
+
+        // Arrange
+        payroll.addEmployee(ALICE, SALARY_1);
+
+        // Act
+        payroll.removeEmployee(ALICE);
+
+        // Assert
+        assertEq(payroll.getEmployeeExistence(ALICE), false);
+
+        vm.stopPrank();
+    }
+
+    function testRemovingEmployeeEmits() public {
+        vm.startPrank(owner);
+
+        // Arrange
+        payroll.addEmployee(ALICE, SALARY_1);
+
+        // Act / Assert
+        vm.expectEmit(true, false, false, false, address(payroll));
+        emit EmployeeRemoved(ALICE);
+        payroll.removeEmployee(ALICE);
+
+        vm.stopPrank();
     }
 
     modifier addMultipleEmployees() {
