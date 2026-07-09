@@ -24,6 +24,11 @@ contract PayrollTest is Test {
     /* Events */
     event NewEmployeeAdded(address indexed employee, uint256 salary);
     event EmployeeRemoved(address indexed employee);
+    event SalaryUpdated(
+        address indexed employee,
+        uint256 newSalary,
+        uint256 oldSalary
+    );
 
     function setUp() public {
         deployer = new DeployPayroll();
@@ -208,6 +213,9 @@ contract PayrollTest is Test {
         vm.stopPrank();
     }
 
+    /**
+     * @dev This modifier adds multiple salaries to the payroll contract.
+     */
     modifier addMultipleEmployees() {
         vm.startPrank(owner);
         payroll.addEmployee(ALICE, SALARY_1);
@@ -308,5 +316,78 @@ contract PayrollTest is Test {
         // We remove BOB using the owner.
         vm.prank(owner);
         payroll.removeEmployee(BOB);
+    }
+
+    /******************************************************************************
+     *                              UPDATE EMPLOYEE                               *
+     ******************************************************************************/
+    function testUpdateRevertsWhenEmployeeDoesNotExist() public {
+        vm.startPrank(owner);
+    
+        // Act / Assert
+        vm.expectRevert(Payroll.Payroll__EmployeeDoesNotExist.selector);
+        payroll.updateSalary(ALICE, SALARY_1);
+
+        vm.stopPrank();
+    }
+
+    function testUpdateRevertsWhenSalaryIsZero() public {
+        vm.startPrank(owner);
+
+        // Arrange
+        payroll.addEmployee(ALICE, SALARY_1);
+
+        // Act / Assert
+        vm.expectRevert(Payroll.Payroll__SalaryMustBeGreaterThanZero.selector);
+        payroll.updateSalary(ALICE, 0);
+
+        vm.stopPrank();
+    }
+
+    function testUpdatesSalary() public {
+        vm.startPrank(owner);
+
+        // Arrange
+        payroll.addEmployee(ALICE, SALARY_1);
+
+        // Act
+        payroll.updateSalary(ALICE, SALARY_2);
+
+        // Assert
+        assertEq(payroll.getEmployee(ALICE).salary, SALARY_2);
+
+        vm.stopPrank();
+    }
+
+    function testUpdatesTotalSalaries() public addMultipleEmployees {
+        vm.startPrank(owner);
+
+        // Act
+        payroll.updateSalary(ALICE, 25);
+
+        // Assert
+        uint256 newTotalSalaries = payroll.getTotalSalaries();
+        uint256 aggregatedSalaries = payroll.getEmployee(ALICE).salary +
+            payroll.getEmployee(DAVE).salary +
+            payroll.getEmployee(CAROL).salary +
+            payroll.getEmployee(BOB).salary;
+
+        assertEq(aggregatedSalaries, newTotalSalaries);
+
+        vm.stopPrank();
+    }
+
+    function testSalaryUpdatedEmits() public {
+        vm.startPrank(owner);
+
+        // Arrange
+        payroll.addEmployee(ALICE, SALARY_1);
+
+        // Act / Assert
+        vm.expectEmit(true, false, false, true, address(payroll));
+        emit SalaryUpdated(ALICE, SALARY_2, SALARY_1);
+        payroll.updateSalary(ALICE, SALARY_2);
+
+        vm.stopPrank();
     }
 }

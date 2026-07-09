@@ -47,12 +47,20 @@ contract Payroll is Ownable {
     // Events
     event NewEmployeeAdded(address indexed employee, uint256 salary);
     event EmployeeRemoved(address indexed employee);
+    event SalaryUpdated(
+        address indexed employee,
+        uint256 newSalary,
+        uint256 oldSalary
+    );
 
     // Errors
     error Payroll__EmployeeAlreadyExists();
     error Payroll__InvalidAddress();
     error Payroll__SalaryMustBeGreaterThanZero();
     error Payroll__EmployeeDoesNotExist();
+    error Payroll__OnlyOwnerAndConcernedEmployeeCanAccess(
+        address senderAddress
+    );
 
     constructor(IERC20 stablecoin) Ownable(msg.sender) {
         i_stablecoin = stablecoin;
@@ -123,6 +131,36 @@ contract Payroll is Ownable {
         emit EmployeeRemoved(employeeToRemove.employeeAddress);
     }
 
+    function updateSalary(
+        address employeeAddress,
+        uint256 newSalary
+    ) external onlyOwner {
+        if (!s_employeeAddressToExistence[employeeAddress]) {
+            revert Payroll__EmployeeDoesNotExist();
+        }
+        if (newSalary == 0) {
+            revert Payroll__SalaryMustBeGreaterThanZero();
+        }
+
+        uint256 employeeIndex = s_employeeAddressToIndex[employeeAddress];
+        Employee memory employee = s_employees[employeeIndex];
+        uint256 oldSalary = employee.salary;
+
+        s_employees[employeeIndex].salary = newSalary;
+        // int256 offset = int256(newSalary - oldSalary);
+
+        // if (offset < 0) {
+        //     s_totalSalaries -= uint256(offset);
+        // } else {
+        //     s_totalSalaries += uint256(offset);
+        // }
+        unchecked {
+            s_totalSalaries += newSalary - oldSalary;
+        }
+
+        emit SalaryUpdated(employee.employeeAddress, newSalary, oldSalary);
+    }
+
     function deposit() public {}
 
     function withdraw() public {}
@@ -137,6 +175,17 @@ contract Payroll is Ownable {
         returns (Employee[] memory)
     {
         return s_employees;
+    }
+
+    function getEmployee(
+        address employeeAddress
+    ) external view returns (Employee memory) {
+        if (msg.sender != owner() && msg.sender != employeeAddress) {
+            revert Payroll__OnlyOwnerAndConcernedEmployeeCanAccess(msg.sender);
+        }
+
+        uint256 employeeIndex = s_employeeAddressToIndex[employeeAddress];
+        return s_employees[employeeIndex];
     }
 
     // Since this is an implementation we should use stdStorage instead.
