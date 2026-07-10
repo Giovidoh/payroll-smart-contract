@@ -6,6 +6,7 @@ import {DeployPayroll} from "script/DeployPayroll.s.sol";
 import {Payroll} from "src/Payroll.sol";
 import {MockUSDC} from "test/mock/MockUSDC.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 contract PayrollTest is Test {
     DeployPayroll deployer;
@@ -127,7 +128,12 @@ contract PayrollTest is Test {
         vm.prank(ALICE);
 
         // Act / Assert
-        vm.expectRevert();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                ALICE
+            )
+        );
         payroll.addEmployee(BOB, SALARY_4);
 
         // Then we add an employee using the owner.
@@ -318,12 +324,12 @@ contract PayrollTest is Test {
         payroll.removeEmployee(BOB);
     }
 
-    /******************************************************************************
-     *                              UPDATE EMPLOYEE                               *
-     ******************************************************************************/
+    /*************************************************************************************
+     *                              UPDATE EMPLOYEE SALARY                               *
+     *************************************************************************************/
     function testUpdateRevertsWhenEmployeeDoesNotExist() public {
         vm.startPrank(owner);
-    
+
         // Act / Assert
         vm.expectRevert(Payroll.Payroll__EmployeeDoesNotExist.selector);
         payroll.updateSalary(ALICE, SALARY_1);
@@ -344,6 +350,19 @@ contract PayrollTest is Test {
         vm.stopPrank();
     }
 
+    function testUpdateSalaryRevertsWhenValueUnchanged() public {
+        vm.startPrank(owner);
+
+        // Arrange
+        payroll.addEmployee(ALICE, SALARY_1);
+
+        // Act / Assert
+        vm.expectRevert(Payroll.Payroll__SalaryUnchanged.selector);
+        payroll.updateSalary(ALICE, SALARY_1);
+
+        vm.stopPrank();
+    }
+
     function testUpdatesSalary() public {
         vm.startPrank(owner);
 
@@ -359,11 +378,32 @@ contract PayrollTest is Test {
         vm.stopPrank();
     }
 
-    function testUpdatesTotalSalaries() public addMultipleEmployees {
+    function testUpdatesTotalSalariesOnPayCut() public addMultipleEmployees {
         vm.startPrank(owner);
 
         // Act
         payroll.updateSalary(ALICE, 25);
+
+        // Assert
+        uint256 newTotalSalaries = payroll.getTotalSalaries();
+        uint256 aggregatedSalaries = payroll.getEmployee(ALICE).salary +
+            payroll.getEmployee(DAVE).salary +
+            payroll.getEmployee(CAROL).salary +
+            payroll.getEmployee(BOB).salary;
+
+        assertEq(aggregatedSalaries, newTotalSalaries);
+
+        vm.stopPrank();
+    }
+
+    function testUpdatesTotalSalariesOnPayIncrease()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(owner);
+
+        // Act
+        payroll.updateSalary(ALICE, 5e9);
 
         // Assert
         uint256 newTotalSalaries = payroll.getTotalSalaries();
@@ -389,5 +429,76 @@ contract PayrollTest is Test {
         payroll.updateSalary(ALICE, SALARY_2);
 
         vm.stopPrank();
+    }
+
+    function testOnlyOwnerCanUpdateSalary() public addMultipleEmployees {
+        // Arrange
+        vm.prank(ALICE);
+
+        // Act / Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                ALICE
+            )
+        );
+        payroll.updateSalary(BOB, SALARY_1);
+
+        vm.prank(owner);
+        payroll.updateSalary(BOB, SALARY_1);
+    }
+
+    /******************************************************************************
+     *                                GET EMPLOYEE                                *
+     ******************************************************************************/
+    function testGetEmployeeRevertsForUnauthorizedCaller() public {
+        // Arrange
+        vm.prank(BOB);
+
+        // Act / Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Payroll
+                    .Payroll__OnlyOwnerAndConcernedEmployeeCanAccess
+                    .selector,
+                BOB
+            )
+        );
+        payroll.getEmployee(ALICE);
+    }
+
+    function testGetEmployeeRevertsWhenEmployeeDoesNotExist() public {
+        // Arrange
+        vm.prank(owner);
+
+        // Act / Assert
+        vm.expectRevert(Payroll.Payroll__EmployeeDoesNotExist.selector);
+        payroll.getEmployee(ALICE);
+    }
+
+    function testGetEmployeeSucceedsForOwner() public {
+        // Arrange
+        vm.prank(owner);
+        payroll.addEmployee(ALICE, SALARY_1);
+
+        // Act
+        vm.prank(owner);
+        Payroll.Employee memory employee = payroll.getEmployee(ALICE);
+
+        // Assert
+        assertEq(employee.employeeAddress, ALICE);
+    }
+
+    function testGetEmployeeSucceedsForTheEmployeeThemself() public {
+        // Arrange
+        vm.prank(owner);
+        payroll.addEmployee(ALICE, SALARY_1);
+
+        // Act
+        vm.prank(ALICE);
+        Payroll.Employee memory employee = payroll.getEmployee(ALICE);
+
+        // Assert
+        assertEq(employee.employeeAddress, ALICE);
     }
 }

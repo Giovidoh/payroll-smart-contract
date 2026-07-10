@@ -61,6 +61,7 @@ contract Payroll is Ownable {
     error Payroll__OnlyOwnerAndConcernedEmployeeCanAccess(
         address senderAddress
     );
+    error Payroll__SalaryUnchanged();
 
     constructor(IERC20 stablecoin) Ownable(msg.sender) {
         i_stablecoin = stablecoin;
@@ -146,14 +147,19 @@ contract Payroll is Ownable {
         Employee memory employee = s_employees[employeeIndex];
         uint256 oldSalary = employee.salary;
 
-        s_employees[employeeIndex].salary = newSalary;
-        // int256 offset = int256(newSalary - oldSalary);
+        if (newSalary == oldSalary) {
+            revert Payroll__SalaryUnchanged();
+        }
 
-        // if (offset < 0) {
-        //     s_totalSalaries -= uint256(offset);
+        s_employees[employeeIndex].salary = newSalary;
+
+        // if (newSalary >= oldSalary) {
+        //     s_totalSalaries += newSalary - oldSalary;
         // } else {
-        //     s_totalSalaries += uint256(offset);
+        //     s_totalSalaries -= oldSalary - newSalary;
         // }
+        //
+        // The code commented just above can be used to be more explicit but consumes more gas
         unchecked {
             s_totalSalaries += newSalary - oldSalary;
         }
@@ -180,8 +186,13 @@ contract Payroll is Ownable {
     function getEmployee(
         address employeeAddress
     ) external view returns (Employee memory) {
+        // It's important checking the access control before any other checks.
+        // Thus an attacker can't guess which addresses exist or not.
         if (msg.sender != owner() && msg.sender != employeeAddress) {
             revert Payroll__OnlyOwnerAndConcernedEmployeeCanAccess(msg.sender);
+        }
+        if (!s_employeeAddressToExistence[employeeAddress]) {
+            revert Payroll__EmployeeDoesNotExist();
         }
 
         uint256 employeeIndex = s_employeeAddressToIndex[employeeAddress];
