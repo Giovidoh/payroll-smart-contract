@@ -43,7 +43,6 @@ contract Payroll is Ownable {
     mapping(address => uint256) private s_employeeAddressToIndex;
     mapping(address => bool) private s_employeeAddressToExistence;
     uint256 private s_totalSalaries;
-    uint256 private s_availableFunds;
 
     // Events
     event NewEmployeeAdded(address indexed employee, uint256 salary);
@@ -53,7 +52,7 @@ contract Payroll is Ownable {
         uint256 newSalary,
         uint256 oldSalary
     );
-    event DepositDone();
+    event FundsDeposited(address indexed owner, uint256 amount);
 
     // Errors
     error Payroll__EmployeeAlreadyExists();
@@ -177,26 +176,17 @@ contract Payroll is Ownable {
             revert Payroll__DepositAmountMustBeGreaterThanZero();
         }
 
-        // Update available funds
-        s_availableFunds += amount;
-
-        // Approve
-        bool approveSuccess = i_stablecoin.approve(address(this), amount);
-        if (!approveSuccess) {
-            revert Payroll__ApprovalFailed();
-        }
-
         // Transfer from owner's wallet
-        bool transferFromSuccess = i_stablecoin.transferFrom(
-            owner(),
+        bool success = i_stablecoin.transferFrom(
+            msg.sender,
             address(this),
             amount
         );
-        if (!transferFromSuccess) {
+        if (!success) {
             revert Payroll__TransferFromFailed();
         }
 
-        emit DepositDone();
+        emit FundsDeposited(msg.sender, amount);
     }
 
     function withdraw() public {}
