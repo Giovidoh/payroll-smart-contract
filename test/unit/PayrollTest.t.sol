@@ -9,10 +9,10 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 contract PayrollTest is Test {
-    DeployPayroll deployer;
-    Payroll payroll;
-    MockUSDC mockUSDC;
-    address owner;
+    DeployPayroll public deployer;
+    Payroll public payroll;
+    MockUSDC public mockUSDC;
+    address public OWNER;
     address public ALICE = makeAddr("alice");
     uint256 public constant SALARY_1 = 500 * 1e6;
     address public DAVE = makeAddr("dave");
@@ -34,7 +34,7 @@ contract PayrollTest is Test {
     function setUp() public {
         deployer = new DeployPayroll();
         (payroll, mockUSDC) = deployer.run();
-        owner = payroll.owner();
+        OWNER = payroll.owner();
     }
 
     /******************************************************************************
@@ -42,18 +42,18 @@ contract PayrollTest is Test {
      ******************************************************************************/
     function testRevertsWhenEmployeeExists() public {
         // Arrange
-        vm.prank(owner);
+        vm.prank(OWNER);
         payroll.addEmployee(ALICE, SALARY_1);
 
         // Act / Assert
         vm.expectRevert(Payroll.Payroll__EmployeeAlreadyExists.selector);
-        vm.prank(owner);
+        vm.prank(OWNER);
         payroll.addEmployee(ALICE, SALARY_1);
     }
 
     function testRevertsWhenEmployeeAddressIsZero() public {
         // Arrange
-        vm.prank(owner);
+        vm.prank(OWNER);
 
         // Act / Assert
         vm.expectRevert(Payroll.Payroll__InvalidAddress.selector);
@@ -62,7 +62,7 @@ contract PayrollTest is Test {
 
     function testRevertsWhenSalaryIsZero() public {
         // Arrange
-        vm.prank(owner);
+        vm.prank(OWNER);
 
         // Act / Assert
         vm.expectRevert(Payroll.Payroll__SalaryMustBeGreaterThanZero.selector);
@@ -71,7 +71,7 @@ contract PayrollTest is Test {
 
     function testEmployeeAddsToArray() public {
         // Arrange
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Act
         payroll.addEmployee(ALICE, SALARY_1);
@@ -84,7 +84,7 @@ contract PayrollTest is Test {
 
     function testUpdatesMappings() public {
         // Arrange
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Act
         payroll.addEmployee(ALICE, SALARY_1);
@@ -97,15 +97,15 @@ contract PayrollTest is Test {
 
     function testSalaryAddsToTotalSalaries() public {
         // Arrange
-        vm.prank(owner);
+        vm.prank(OWNER);
         uint256 startingTotalSalaries = payroll.getTotalSalaries();
 
         // Act
-        vm.prank(owner);
+        vm.prank(OWNER);
         payroll.addEmployee(ALICE, SALARY_1);
 
         // Assert
-        vm.prank(owner);
+        vm.prank(OWNER);
         uint256 endingTotalSalaries = payroll.getTotalSalaries();
 
         assertEq(startingTotalSalaries, 0);
@@ -114,7 +114,7 @@ contract PayrollTest is Test {
 
     function testAddingEmployeeEmits() public {
         // Arrange
-        vm.prank(owner);
+        vm.prank(OWNER);
 
         // Act / Assert
         vm.expectEmit(true, false, false, true, address(payroll));
@@ -136,8 +136,8 @@ contract PayrollTest is Test {
         );
         payroll.addEmployee(BOB, SALARY_4);
 
-        // Then we add an employee using the owner.
-        vm.prank(owner);
+        // Then we add an employee using the OWNER.
+        vm.prank(OWNER);
         payroll.addEmployee(BOB, SALARY_4);
     }
 
@@ -146,7 +146,7 @@ contract PayrollTest is Test {
      ******************************************************************************/
     function testRevertsWhenEmployeeDoesNotExist() public {
         // Arrange
-        vm.prank(owner);
+        vm.prank(OWNER);
 
         // Act / Assert
         vm.expectRevert(Payroll.Payroll__EmployeeDoesNotExist.selector);
@@ -157,7 +157,7 @@ contract PayrollTest is Test {
         public
         addMultipleEmployees
     {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Arrange
         uint256 startingTotalSalaries = payroll.getTotalSalaries();
@@ -173,7 +173,7 @@ contract PayrollTest is Test {
     }
 
     function testIndexMappingClearedAfterRemoval() public addMultipleEmployees {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Arrange
         uint256 startingIndex = payroll.getEmployeeIndex(BOB);
@@ -191,7 +191,7 @@ contract PayrollTest is Test {
     }
 
     function testExistenceMappingClearedAfterRemoval() public {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Arrange
         payroll.addEmployee(ALICE, SALARY_1);
@@ -206,7 +206,7 @@ contract PayrollTest is Test {
     }
 
     function testRemovingEmployeeEmits() public {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Arrange
         payroll.addEmployee(ALICE, SALARY_1);
@@ -223,7 +223,7 @@ contract PayrollTest is Test {
      * @dev This modifier adds multiple salaries to the payroll contract.
      */
     modifier addMultipleEmployees() {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
         payroll.addEmployee(ALICE, SALARY_1);
         payroll.addEmployee(DAVE, SALARY_2);
         payroll.addEmployee(CAROL, SALARY_3);
@@ -236,7 +236,7 @@ contract PayrollTest is Test {
         public
         addMultipleEmployees
     {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Act
         payroll.removeEmployee(ALICE);
@@ -254,7 +254,7 @@ contract PayrollTest is Test {
         public
         addMultipleEmployees
     {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Act
         payroll.removeEmployee(DAVE);
@@ -272,7 +272,7 @@ contract PayrollTest is Test {
         public
         addMultipleEmployees
     {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Act
         payroll.removeEmployee(BOB);
@@ -289,7 +289,7 @@ contract PayrollTest is Test {
     }
 
     function testRemovesOnlyEmployeeAndEmptiesArray() public {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Arrange
         payroll.addEmployee(ALICE, SALARY_1);
@@ -306,7 +306,7 @@ contract PayrollTest is Test {
 
     function testOnlyOwnerCanRemoveEmployee() public {
         // Arrange
-        vm.prank(owner);
+        vm.prank(OWNER);
         payroll.addEmployee(BOB, SALARY_4);
 
         // We try to remove BOB using ALICE, it should revert
@@ -319,8 +319,8 @@ contract PayrollTest is Test {
         );
         payroll.removeEmployee(BOB);
 
-        // We remove BOB using the owner.
-        vm.prank(owner);
+        // We remove BOB using the OWNER.
+        vm.prank(OWNER);
         payroll.removeEmployee(BOB);
     }
 
@@ -328,7 +328,7 @@ contract PayrollTest is Test {
      *                              UPDATE EMPLOYEE SALARY                               *
      *************************************************************************************/
     function testUpdateRevertsWhenEmployeeDoesNotExist() public {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Act / Assert
         vm.expectRevert(Payroll.Payroll__EmployeeDoesNotExist.selector);
@@ -338,7 +338,7 @@ contract PayrollTest is Test {
     }
 
     function testUpdateRevertsWhenSalaryIsZero() public {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Arrange
         payroll.addEmployee(ALICE, SALARY_1);
@@ -351,7 +351,7 @@ contract PayrollTest is Test {
     }
 
     function testUpdateSalaryRevertsWhenValueUnchanged() public {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Arrange
         payroll.addEmployee(ALICE, SALARY_1);
@@ -364,7 +364,7 @@ contract PayrollTest is Test {
     }
 
     function testUpdatesSalary() public {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Arrange
         payroll.addEmployee(ALICE, SALARY_1);
@@ -379,7 +379,7 @@ contract PayrollTest is Test {
     }
 
     function testUpdatesTotalSalariesOnPayCut() public addMultipleEmployees {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Act
         payroll.updateSalary(ALICE, 25);
@@ -400,7 +400,7 @@ contract PayrollTest is Test {
         public
         addMultipleEmployees
     {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Act
         payroll.updateSalary(ALICE, 5e9);
@@ -418,7 +418,7 @@ contract PayrollTest is Test {
     }
 
     function testSalaryUpdatedEmits() public {
-        vm.startPrank(owner);
+        vm.startPrank(OWNER);
 
         // Arrange
         payroll.addEmployee(ALICE, SALARY_1);
@@ -444,7 +444,7 @@ contract PayrollTest is Test {
         );
         payroll.updateSalary(BOB, SALARY_1);
 
-        vm.prank(owner);
+        vm.prank(OWNER);
         payroll.updateSalary(BOB, SALARY_1);
     }
 
@@ -469,7 +469,7 @@ contract PayrollTest is Test {
 
     function testGetEmployeeRevertsWhenEmployeeDoesNotExist() public {
         // Arrange
-        vm.prank(owner);
+        vm.prank(OWNER);
 
         // Act / Assert
         vm.expectRevert(Payroll.Payroll__EmployeeDoesNotExist.selector);
@@ -478,11 +478,11 @@ contract PayrollTest is Test {
 
     function testGetEmployeeSucceedsForOwner() public {
         // Arrange
-        vm.prank(owner);
+        vm.prank(OWNER);
         payroll.addEmployee(ALICE, SALARY_1);
 
         // Act
-        vm.prank(owner);
+        vm.prank(OWNER);
         Payroll.Employee memory employee = payroll.getEmployee(ALICE);
 
         // Assert
@@ -491,7 +491,7 @@ contract PayrollTest is Test {
 
     function testGetEmployeeSucceedsForTheEmployeeThemself() public {
         // Arrange
-        vm.prank(owner);
+        vm.prank(OWNER);
         payroll.addEmployee(ALICE, SALARY_1);
 
         // Act
@@ -500,5 +500,50 @@ contract PayrollTest is Test {
 
         // Assert
         assertEq(employee.employeeAddress, ALICE);
+    }
+
+    /******************************************************************************
+     *                                  DEPOSIT                                   *
+     ******************************************************************************/
+    function testDepositRevertsWhenAmountIsZero() public {
+        // Arrange
+        vm.prank(OWNER);
+
+        // Act / Assert
+        vm.expectRevert(
+            Payroll.Payroll__DepositAmountMustBeGreaterThanZero.selector
+        );
+        payroll.deposit(0);
+    }
+
+    // function testDepositRevertsWhenTransferFails() public {
+    //     // Arrange
+    //     vm.prank(OWNER);
+
+    //     // Act / Assert
+    //     vm.expectRevert(Payroll.Payroll__TransferFromFailed.selector);
+    //     payroll.deposit(1e6);
+    // }
+
+    function testOwnerCanSuccessfullyDeposit() public {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        uint256 amount = 100_000e6;
+        mockUSDC.approve(address(payroll), amount);
+
+        uint256 ownerStartingBalance = mockUSDC.balanceOf(OWNER);
+        uint256 payrollStartingBalance = mockUSDC.balanceOf(address(payroll));
+
+        // Act
+        payroll.deposit(amount);
+
+        // Assert
+        uint256 ownerEndingBalance = mockUSDC.balanceOf(OWNER);
+        uint256 payrollEndingBalance = mockUSDC.balanceOf(address(payroll));
+        assertEq(ownerEndingBalance, ownerStartingBalance - amount);
+        assertEq(payrollEndingBalance, payrollStartingBalance + amount);
+
+        vm.stopPrank();
     }
 }

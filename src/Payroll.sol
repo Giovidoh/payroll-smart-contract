@@ -64,7 +64,6 @@ contract Payroll is Ownable {
     );
     error Payroll__SalaryUnchanged();
     error Payroll__DepositAmountMustBeGreaterThanZero();
-    error Payroll__ApprovalFailed();
     error Payroll__TransferFromFailed();
 
     constructor(IERC20 stablecoin) Ownable(msg.sender) {
