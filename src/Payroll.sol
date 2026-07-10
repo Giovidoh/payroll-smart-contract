@@ -47,12 +47,21 @@ contract Payroll is Ownable {
     // Events
     event NewEmployeeAdded(address indexed employee, uint256 salary);
     event EmployeeRemoved(address indexed employee);
+    event SalaryUpdated(
+        address indexed employee,
+        uint256 newSalary,
+        uint256 oldSalary
+    );
 
     // Errors
     error Payroll__EmployeeAlreadyExists();
     error Payroll__InvalidAddress();
     error Payroll__SalaryMustBeGreaterThanZero();
     error Payroll__EmployeeDoesNotExist();
+    error Payroll__OnlyOwnerAndConcernedEmployeeCanAccess(
+        address senderAddress
+    );
+    error Payroll__SalaryUnchanged();
 
     constructor(IERC20 stablecoin) Ownable(msg.sender) {
         i_stablecoin = stablecoin;
@@ -123,6 +132,41 @@ contract Payroll is Ownable {
         emit EmployeeRemoved(employeeToRemove.employeeAddress);
     }
 
+    function updateSalary(
+        address employeeAddress,
+        uint256 newSalary
+    ) external onlyOwner {
+        if (!s_employeeAddressToExistence[employeeAddress]) {
+            revert Payroll__EmployeeDoesNotExist();
+        }
+        if (newSalary == 0) {
+            revert Payroll__SalaryMustBeGreaterThanZero();
+        }
+
+        uint256 employeeIndex = s_employeeAddressToIndex[employeeAddress];
+        Employee memory employee = s_employees[employeeIndex];
+        uint256 oldSalary = employee.salary;
+
+        if (newSalary == oldSalary) {
+            revert Payroll__SalaryUnchanged();
+        }
+
+        s_employees[employeeIndex].salary = newSalary;
+
+        // if (newSalary >= oldSalary) {
+        //     s_totalSalaries += newSalary - oldSalary;
+        // } else {
+        //     s_totalSalaries -= oldSalary - newSalary;
+        // }
+        //
+        // The code commented just above can be used to be more explicit but consumes more gas
+        unchecked {
+            s_totalSalaries += newSalary - oldSalary;
+        }
+
+        emit SalaryUpdated(employee.employeeAddress, newSalary, oldSalary);
+    }
+
     function deposit() public {}
 
     function withdraw() public {}
@@ -139,9 +183,25 @@ contract Payroll is Ownable {
         return s_employees;
     }
 
-    // Since this is an implementation we should use stdStorage instead.
-    // But here it's restricted to owner only so no security issue.
-    // I'll update that later.
+    function getEmployee(
+        address employeeAddress
+    ) external view returns (Employee memory) {
+        // It's important checking the access control before any other checks.
+        // Thus an attacker can't guess which addresses exist or not.
+        if (msg.sender != owner() && msg.sender != employeeAddress) {
+            revert Payroll__OnlyOwnerAndConcernedEmployeeCanAccess(msg.sender);
+        }
+        if (!s_employeeAddressToExistence[employeeAddress]) {
+            revert Payroll__EmployeeDoesNotExist();
+        }
+
+        uint256 employeeIndex = s_employeeAddressToIndex[employeeAddress];
+        return s_employees[employeeIndex];
+    }
+
+    // This is for testing purposes, it's an implementation detail not useful to stakeholders.
+    // But here it's restricted to owner only so no high security issue.
+    // stdStorage should replace it later.
     function getEmployeeIndex(
         address employeeAddress
     ) external view onlyOwner returns (uint256) {
