@@ -165,7 +165,7 @@ Tests are organized by scope:
 
 - [x] Employee management — `addEmployee`, `removeEmployee` (gas-efficient array + mapping storage, swap-and-pop removal)
 - [x] Unit tests for employee management — 18 tests, full framework coverage (reverts, state changes, events, access control, boundaries)
-- [ ] `updateEmployee` — update an existing employee's salary and/or address
+- [x] `updateSalary` — update an existing employee's salary and/or address
 - [ ] Fund management — `deposit`, `withdraw` (ERC-20 stablecoin)
 - [ ] Payroll execution — `runPayroll`
 - [ ] Employee-facing getter — `getEmployee()`, viewable by the owner and the employee themselves
