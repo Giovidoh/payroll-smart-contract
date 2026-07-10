@@ -43,6 +43,7 @@ contract Payroll is Ownable {
     mapping(address => uint256) private s_employeeAddressToIndex;
     mapping(address => bool) private s_employeeAddressToExistence;
     uint256 private s_totalSalaries;
+    uint256 private s_availableFunds;
 
     // Events
     event NewEmployeeAdded(address indexed employee, uint256 salary);
@@ -52,6 +53,7 @@ contract Payroll is Ownable {
         uint256 newSalary,
         uint256 oldSalary
     );
+    event DepositDone();
 
     // Errors
     error Payroll__EmployeeAlreadyExists();
@@ -62,6 +64,9 @@ contract Payroll is Ownable {
         address senderAddress
     );
     error Payroll__SalaryUnchanged();
+    error Payroll__DepositAmountMustBeGreaterThanZero();
+    error Payroll__ApprovalFailed();
+    error Payroll__TransferFromFailed();
 
     constructor(IERC20 stablecoin) Ownable(msg.sender) {
         i_stablecoin = stablecoin;
@@ -167,7 +172,32 @@ contract Payroll is Ownable {
         emit SalaryUpdated(employee.employeeAddress, newSalary, oldSalary);
     }
 
-    function deposit() public {}
+    function deposit(uint256 amount) external onlyOwner {
+        if (amount == 0) {
+            revert Payroll__DepositAmountMustBeGreaterThanZero();
+        }
+
+        // Update available funds
+        s_availableFunds += amount;
+
+        // Approve
+        bool approveSuccess = i_stablecoin.approve(address(this), amount);
+        if (!approveSuccess) {
+            revert Payroll__ApprovalFailed();
+        }
+
+        // Transfer from owner's wallet
+        bool transferFromSuccess = i_stablecoin.transferFrom(
+            owner(),
+            address(this),
+            amount
+        );
+        if (!transferFromSuccess) {
+            revert Payroll__TransferFromFailed();
+        }
+
+        emit DepositDone();
+    }
 
     function withdraw() public {}
 
