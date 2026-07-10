@@ -153,7 +153,7 @@ contract PayrollTest is Test {
         payroll.removeEmployee(ALICE);
     }
 
-    function testSalarySubstractsFromTotalSalaries()
+    function testSalarySubtractsFromTotalSalaries()
         public
         addMultipleEmployees
     {

@@ -199,9 +199,9 @@ contract Payroll is Ownable {
         return s_employees[employeeIndex];
     }
 
-    // Since this is an implementation we should use stdStorage instead.
-    // But here it's restricted to owner only so no security issue.
-    // I'll update that later.
+    // This is for testing purposes, it's an implementation detail not useful to stakeholders.
+    // But here it's restricted to owner only so no high security issue.
+    // stdStorage should replace it later.
     function getEmployeeIndex(
         address employeeAddress
     ) external view onlyOwner returns (uint256) {
