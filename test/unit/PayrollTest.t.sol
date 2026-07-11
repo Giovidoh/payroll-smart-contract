@@ -30,6 +30,19 @@ contract PayrollTest is Test {
         uint256 oldSalary
     );
 
+    /**
+     * @dev This modifier adds multiple salaries to the payroll contract.
+     */
+    modifier addMultipleEmployees() {
+        vm.startPrank(OWNER);
+        payroll.addEmployee(ALICE, SALARY_1);
+        payroll.addEmployee(DAVE, SALARY_2);
+        payroll.addEmployee(CAROL, SALARY_3);
+        payroll.addEmployee(BOB, SALARY_4);
+        vm.stopPrank();
+        _;
+    }
+
     function setUp() public {
         deployer = new DeployPayroll();
         (payroll, mockUSDC) = deployer.run();
@@ -216,19 +229,6 @@ contract PayrollTest is Test {
         payroll.removeEmployee(ALICE);
 
         vm.stopPrank();
-    }
-
-    /**
-     * @dev This modifier adds multiple salaries to the payroll contract.
-     */
-    modifier addMultipleEmployees() {
-        vm.startPrank(OWNER);
-        payroll.addEmployee(ALICE, SALARY_1);
-        payroll.addEmployee(DAVE, SALARY_2);
-        payroll.addEmployee(CAROL, SALARY_3);
-        payroll.addEmployee(BOB, SALARY_4);
-        vm.stopPrank();
-        _;
     }
 
     function testRemovesFirstEmployeeWhenMultipleExist()

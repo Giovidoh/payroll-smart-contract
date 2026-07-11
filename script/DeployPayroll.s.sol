@@ -15,7 +15,7 @@ contract DeployPayroll is Script {
     function deployContract() public returns (Payroll, MockUSDC) {
         vm.startBroadcast();
         MockUSDC mockUSDC = new MockUSDC(INITIAL_SUPPLY);
-        Payroll payroll = new Payroll(mockUSDC);
+        Payroll payroll = new Payroll(mockUSDC, 3);
         vm.stopBroadcast();
 
         return (payroll, mockUSDC);

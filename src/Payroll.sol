@@ -39,6 +39,7 @@ contract Payroll is Ownable {
 
     // State variables
     IERC20 private immutable i_stablecoin;
+    uint256 private immutable i_reservedPayrollCycles;
     Employee[] private s_employees;
     mapping(address => uint256) private s_employeeAddressToIndex;
     mapping(address => bool) private s_employeeAddressToExistence;
@@ -67,11 +68,17 @@ contract Payroll is Ownable {
     error Payroll__DepositAmountMustBeGreaterThanZero();
     error Payroll__TransferFromFailed();
     error Payroll__WithdrawalAmountMustBeGreaterThanZero();
-    error Payroll__WithdrawalAmountExceedsAvailableFunds();
+    error Payroll__WithdrawalAmountExceedsAvailableFunds(
+        uint256 availableFunds
+    );
     error Payroll__WithdrawalFailed();
 
-    constructor(IERC20 stablecoin) Ownable(msg.sender) {
+    constructor(
+        IERC20 stablecoin,
+        uint256 reservedPayrollCycles
+    ) Ownable(msg.sender) {
         i_stablecoin = stablecoin;
+        i_reservedPayrollCycles = reservedPayrollCycles;
     }
 
     function addEmployee(
@@ -196,8 +203,19 @@ contract Payroll is Ownable {
         if (amount == 0) {
             revert Payroll__WithdrawalAmountMustBeGreaterThanZero();
         }
-        if (amount > i_stablecoin.balanceOf(address(this))) {
-            revert Payroll__WithdrawalAmountExceedsAvailableFunds();
+
+        uint256 requiredReserve = s_totalSalaries * i_reservedPayrollCycles;
+        uint256 contractBalance = i_stablecoin.balanceOf(address(this));
+
+        if (contractBalance < requiredReserve) {
+            revert Payroll__WithdrawalAmountExceedsAvailableFunds(0);
+        }
+
+        uint256 availableSurplus = contractBalance - requiredReserve;
+        if (amount > availableSurplus) {
+            revert Payroll__WithdrawalAmountExceedsAvailableFunds(
+                availableSurplus
+            );
         }
 
         bool success = i_stablecoin.transfer(msg.sender, amount);
@@ -253,5 +271,9 @@ contract Payroll is Ownable {
 
     function getTotalSalaries() external view onlyOwner returns (uint256) {
         return s_totalSalaries;
+    }
+
+    function getReservedPayrollCycles() external view returns (uint256) {
+        return i_reservedPayrollCycles;
     }
 }

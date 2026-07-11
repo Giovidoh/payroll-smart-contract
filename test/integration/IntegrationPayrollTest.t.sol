@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, console} from "forge-std/Test.sol";
 import {DeployPayroll} from "script/DeployPayroll.s.sol";
 import {Payroll} from "src/Payroll.sol";
 import {MockUSDC} from "test/mocks/MockUSDC.sol";
@@ -26,6 +26,19 @@ contract IntegrationPayrollTest is Test {
     /* Events */
     event FundsDeposited(address indexed owner, uint256 amount);
     event AmountWithdrawn(address indexed owner, uint256 amount);
+
+    /**
+     * @dev This modifier adds multiple salaries to the payroll contract.
+     */
+    modifier addMultipleEmployees() {
+        vm.startPrank(OWNER);
+        payroll.addEmployee(ALICE, SALARY_1);
+        payroll.addEmployee(DAVE, SALARY_2);
+        payroll.addEmployee(CAROL, SALARY_3);
+        payroll.addEmployee(BOB, SALARY_4);
+        vm.stopPrank();
+        _;
+    }
 
     function setUp() external {
         deployer = new DeployPayroll();
@@ -160,7 +173,10 @@ contract IntegrationPayrollTest is Test {
         vm.stopPrank();
     }
 
-    function testWithdrawRevertsWhenAmountIsGreaterThanAvailableFunds() public {
+    function testWithdrawRevertsWhenAmountExceedsSurplusAboveReserve()
+        public
+        addMultipleEmployees
+    {
         vm.startPrank(OWNER);
 
         // Arrange
@@ -168,10 +184,37 @@ contract IntegrationPayrollTest is Test {
         payroll.deposit(DEPOSIT_AMOUNT);
 
         // Act / Assert
+        uint256 requiredReserve = payroll.getTotalSalaries() *
+            payroll.getReservedPayrollCycles();
+        uint256 surplus = DEPOSIT_AMOUNT - requiredReserve;
         vm.expectRevert(
-            Payroll.Payroll__WithdrawalAmountExceedsAvailableFunds.selector
+            abi.encodeWithSelector(
+                Payroll.Payroll__WithdrawalAmountExceedsAvailableFunds.selector,
+                surplus
+            )
         );
-        payroll.withdraw(DEPOSIT_AMOUNT * 2);
+        payroll.withdraw(DEPOSIT_AMOUNT);
+
+        vm.stopPrank();
+    }
+
+    function testWithdrawRevertsWhenContractBalanceIsBelowRequiredReserve()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        // We have employees and no contract balance so contractBalance < requiredReserve
+
+        // Act / Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Payroll.Payroll__WithdrawalAmountExceedsAvailableFunds.selector,
+                0
+            )
+        );
+        payroll.withdraw(DEPOSIT_AMOUNT);
 
         vm.stopPrank();
     }
@@ -199,6 +242,64 @@ contract IntegrationPayrollTest is Test {
         assertEq(
             payrollEndingBalance,
             payrollStartingBalance + DEPOSIT_AMOUNT - withdrawalAmount
+        );
+
+        vm.stopPrank();
+    }
+
+    function testWithdrawSucceedsWithExactSurplusAboveReserve()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        uint256 ownerStartingBalance = mockUSDC.balanceOf(OWNER);
+        uint256 requiredReserve = payroll.getTotalSalaries() *
+            payroll.getReservedPayrollCycles();
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act
+        uint256 exactSurplus = DEPOSIT_AMOUNT - requiredReserve;
+        payroll.withdraw(exactSurplus);
+
+        // Assert
+        uint256 ownerEndingBalance = mockUSDC.balanceOf(OWNER);
+        uint256 payrollEndingBalance = mockUSDC.balanceOf(address(payroll));
+        assertEq(ownerEndingBalance, ownerStartingBalance - requiredReserve);
+        assertEq(payrollEndingBalance, requiredReserve);
+
+        vm.stopPrank();
+    }
+
+    function testWithdrawReservesScaleWithMultipleCycles()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        uint256 reservedPayrollCycles = 2;
+        Payroll newPayroll = new Payroll(mockUSDC, reservedPayrollCycles);
+
+        // Arrange
+        newPayroll.addEmployee(ALICE, SALARY_1);
+        newPayroll.addEmployee(DAVE, SALARY_2);
+        newPayroll.addEmployee(CAROL, SALARY_3);
+        newPayroll.addEmployee(BOB, SALARY_4);
+        mockUSDC.approve(address(newPayroll), DEPOSIT_AMOUNT);
+        newPayroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act
+        uint256 requiredReserve = newPayroll.getTotalSalaries() *
+            newPayroll.getReservedPayrollCycles();
+        uint256 surplus = DEPOSIT_AMOUNT - requiredReserve;
+        newPayroll.withdraw(surplus);
+
+        // Assert
+        assertEq(
+            mockUSDC.balanceOf(address(newPayroll)),
+            DEPOSIT_AMOUNT - surplus
         );
 
         vm.stopPrank();
@@ -236,5 +337,54 @@ contract IntegrationPayrollTest is Test {
             )
         );
         payroll.withdraw(DEPOSIT_AMOUNT);
+    }
+
+    function testWithdrawSucceedsWhenReservedPayrollCyclesIsZero() public {
+        vm.startPrank(OWNER);
+
+        uint256 reservedPayrollCycles = 0;
+        Payroll newPayroll = new Payroll(mockUSDC, reservedPayrollCycles);
+
+        // Arrange
+        newPayroll.addEmployee(ALICE, SALARY_1);
+        newPayroll.addEmployee(DAVE, SALARY_2);
+        newPayroll.addEmployee(CAROL, SALARY_3);
+        newPayroll.addEmployee(BOB, SALARY_4);
+        mockUSDC.approve(address(newPayroll), DEPOSIT_AMOUNT);
+        newPayroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act
+        newPayroll.withdraw(DEPOSIT_AMOUNT); // all salaries are multiplied by 0 (reservedPayrollCycles) so no subtraction needed.
+
+        // Assert
+        assertEq(mockUSDC.balanceOf(address(newPayroll)), 0);
+
+        vm.stopPrank();
+    }
+
+    function testWithdrawRevertsWhenAmountIsOneUnitPastSurplus()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        uint256 requiredReserve = payroll.getTotalSalaries() *
+            payroll.getReservedPayrollCycles();
+        uint256 surplus = DEPOSIT_AMOUNT - requiredReserve;
+
+        // Act / Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Payroll.Payroll__WithdrawalAmountExceedsAvailableFunds.selector,
+                surplus
+            )
+        );
+        payroll.withdraw(surplus + 1); // one wei into committed funds
+
+        vm.stopPrank();
     }
 }
