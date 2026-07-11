@@ -192,6 +192,7 @@ contract Payroll is Ownable {
             address(this),
             amount
         );
+        // unreachable with OZ's modern ERC20, kept for defense against non-standard tokens
         if (!success) {
             revert Payroll__TransferFromFailed();
         }
@@ -219,6 +220,7 @@ contract Payroll is Ownable {
         }
 
         bool success = i_stablecoin.transfer(msg.sender, amount);
+        // unreachable with OZ's modern ERC20, kept for defense against non-standard tokens
         if (!success) {
             revert Payroll__WithdrawalFailed();
         }
