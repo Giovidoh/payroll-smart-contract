@@ -62,6 +62,8 @@
 
 **Payroll Smart Contract** is a Solidity project exploring how blockchain can be used to manage and execute payroll on-chain. An employer can register employees, fund the contract with a stablecoin, and trigger salary payments to every employee in a single transaction — with every action recorded on-chain and independently verifiable by anyone.
 
+A key design decision: the contract enforces a **payroll reserve**. When deployed, the employer sets a fixed number of payroll cycles (`i_reservedPayrollCycles`) that must always remain available in the contract before any surplus can be withdrawn. This value is immutable, set once at deployment and never changeable afterward — so the employer can never quietly drain funds that employees are relying on. This goes beyond what `s_totalSalaries` alone protects: it's not just "don't withdraw money owed right now," it's "always keep N future payroll cycles funded in advance."
+
 This project is part of my ongoing Web3 developer portfolio, and also serves as the basis for my bachelor's thesis.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -122,11 +124,18 @@ The contract owner (the employer) can currently:
 
 - Add a new employee — `addEmployee(address employeeAddress, uint256 salary)`
 - Remove an existing employee — `removeEmployee(address employeeAddress)`
+- Update an existing employee's salary — `updateSalary(address employeeAddress, uint256 newSalary)`
 - View all registered employees — `getAllEmployees()`
 - View the total salaries currently owed — `getTotalSalaries()`
 - Check if an address is a registered employee — `getEmployeeExistence(address employeeAddress)`
+- Deposit stablecoin funds into the contract — `deposit(uint256 amount)` (requires an `approve()` on the stablecoin beforehand)
+- Withdraw surplus funds, above the required payroll reserve — `withdraw(uint256 amount)`
 
-Fund management (`deposit`, `withdraw`), payroll execution (`runPayroll`), and an employee-facing salary getter are actively being developed — see the Roadmap below.
+The owner and the concerned employee themselves can:
+
+- View a specific employee's data — `getEmployee(address employeeAddress)`
+
+Payroll execution (`runPayroll`) is actively being developed — see the Roadmap below.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -154,8 +163,8 @@ forge coverage
 
 Tests are organized by scope:
 
-- `test/unit/` — tests each function in isolation. Currently covers employee management (`addEmployee`, `removeEmployee`) with 18 tests, including revert conditions, state changes, event emissions, access control, and boundary cases such as removing the first, middle, last, and only employee in the array.
-- `test/integration/` — will cover multiple functions working together end-to-end (e.g. deposit → run payroll → verify payments), once fund management and payroll execution are implemented.
+- `test/unit/` — tests each function in isolation. Currently covers employee management (`addEmployee`, `removeEmployee`, `updateSalary`, `getEmployee`) and fund management (`deposit`, `withdraw`), including revert conditions, state changes, event emissions, access control, and boundary cases (e.g. removing the first/middle/last/only employee in the array, withdrawing exactly at the payroll reserve boundary).
+- `test/integration/` — will cover multiple functions working together end-to-end (e.g. deposit → run payroll → verify payments), once payroll execution is implemented.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -165,10 +174,10 @@ Tests are organized by scope:
 
 - [x] Employee management — `addEmployee`, `removeEmployee` (gas-efficient array + mapping storage, swap-and-pop removal)
 - [x] Unit tests for employee management — 18 tests, full framework coverage (reverts, state changes, events, access control, boundaries)
-- [x] `updateSalary` — update an existing employee's salary and/or address
-- [ ] Fund management — `deposit`, `withdraw` (ERC-20 stablecoin)
+- [x] `updateSalary` — update an existing employee's salary
+- [x] `getEmployee` — viewable by the owner and the employee themselves
+- [x] Fund management — `deposit`, `withdraw` (ERC-20 stablecoin), with a payroll reserve protecting a fixed number of future payroll cycles from withdrawal
 - [ ] Payroll execution — `runPayroll`
-- [ ] Employee-facing getter — `getEmployee()`, viewable by the owner and the employee themselves
 - [ ] Integration test suite
 - [ ] Deployment to Sepolia testnet
 

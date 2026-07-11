@@ -39,6 +39,7 @@ contract Payroll is Ownable {
 
     // State variables
     IERC20 private immutable i_stablecoin;
+    uint256 private immutable i_reservedPayrollCycles;
     Employee[] private s_employees;
     mapping(address => uint256) private s_employeeAddressToIndex;
     mapping(address => bool) private s_employeeAddressToExistence;
@@ -53,6 +54,7 @@ contract Payroll is Ownable {
         uint256 oldSalary
     );
     event FundsDeposited(address indexed owner, uint256 amount);
+    event AmountWithdrawn(address indexed owner, uint256 amount);
 
     // Errors
     error Payroll__EmployeeAlreadyExists();
@@ -65,9 +67,18 @@ contract Payroll is Ownable {
     error Payroll__SalaryUnchanged();
     error Payroll__DepositAmountMustBeGreaterThanZero();
     error Payroll__TransferFromFailed();
+    error Payroll__WithdrawalAmountMustBeGreaterThanZero();
+    error Payroll__WithdrawalAmountExceedsAvailableFunds(
+        uint256 availableFunds
+    );
+    error Payroll__WithdrawalFailed();
 
-    constructor(IERC20 stablecoin) Ownable(msg.sender) {
+    constructor(
+        IERC20 stablecoin,
+        uint256 reservedPayrollCycles
+    ) Ownable(msg.sender) {
         i_stablecoin = stablecoin;
+        i_reservedPayrollCycles = reservedPayrollCycles;
     }
 
     function addEmployee(
@@ -181,6 +192,7 @@ contract Payroll is Ownable {
             address(this),
             amount
         );
+        // unreachable with OZ's modern ERC20, kept for defense against non-standard tokens
         if (!success) {
             revert Payroll__TransferFromFailed();
         }
@@ -188,7 +200,33 @@ contract Payroll is Ownable {
         emit FundsDeposited(msg.sender, amount);
     }
 
-    function withdraw() public {}
+    function withdraw(uint256 amount) external onlyOwner {
+        if (amount == 0) {
+            revert Payroll__WithdrawalAmountMustBeGreaterThanZero();
+        }
+
+        uint256 requiredReserve = s_totalSalaries * i_reservedPayrollCycles;
+        uint256 contractBalance = i_stablecoin.balanceOf(address(this));
+
+        if (contractBalance < requiredReserve) {
+            revert Payroll__WithdrawalAmountExceedsAvailableFunds(0);
+        }
+
+        uint256 availableSurplus = contractBalance - requiredReserve;
+        if (amount > availableSurplus) {
+            revert Payroll__WithdrawalAmountExceedsAvailableFunds(
+                availableSurplus
+            );
+        }
+
+        bool success = i_stablecoin.transfer(msg.sender, amount);
+        // unreachable with OZ's modern ERC20, kept for defense against non-standard tokens
+        if (!success) {
+            revert Payroll__WithdrawalFailed();
+        }
+
+        emit AmountWithdrawn(msg.sender, amount);
+    }
 
     function runPayroll() public {}
 
@@ -235,5 +273,9 @@ contract Payroll is Ownable {
 
     function getTotalSalaries() external view onlyOwner returns (uint256) {
         return s_totalSalaries;
+    }
+
+    function getReservedPayrollCycles() external view returns (uint256) {
+        return i_reservedPayrollCycles;
     }
 }

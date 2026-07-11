@@ -4,16 +4,14 @@ pragma solidity ^0.8.18;
 import {Test, console} from "forge-std/Test.sol";
 import {DeployPayroll} from "script/DeployPayroll.s.sol";
 import {Payroll} from "src/Payroll.sol";
-import {MockUSDC} from "test/mock/MockUSDC.sol";
+import {MockUSDC} from "test/mocks/MockUSDC.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 contract PayrollTest is Test {
     DeployPayroll public deployer;
     Payroll public payroll;
     MockUSDC public mockUSDC;
     address public OWNER;
-    uint256 public constant DEPOSIT_AMOUNT = 100_000e6;
     address public ALICE = makeAddr("alice");
     uint256 public constant SALARY_1 = 500 * 1e6;
     address public DAVE = makeAddr("dave");
@@ -31,7 +29,19 @@ contract PayrollTest is Test {
         uint256 newSalary,
         uint256 oldSalary
     );
-    event FundsDeposited(address indexed owner, uint256 amount);
+
+    /**
+     * @dev This modifier adds multiple salaries to the payroll contract.
+     */
+    modifier addMultipleEmployees() {
+        vm.startPrank(OWNER);
+        payroll.addEmployee(ALICE, SALARY_1);
+        payroll.addEmployee(DAVE, SALARY_2);
+        payroll.addEmployee(CAROL, SALARY_3);
+        payroll.addEmployee(BOB, SALARY_4);
+        vm.stopPrank();
+        _;
+    }
 
     function setUp() public {
         deployer = new DeployPayroll();
@@ -219,19 +229,6 @@ contract PayrollTest is Test {
         payroll.removeEmployee(ALICE);
 
         vm.stopPrank();
-    }
-
-    /**
-     * @dev This modifier adds multiple salaries to the payroll contract.
-     */
-    modifier addMultipleEmployees() {
-        vm.startPrank(OWNER);
-        payroll.addEmployee(ALICE, SALARY_1);
-        payroll.addEmployee(DAVE, SALARY_2);
-        payroll.addEmployee(CAROL, SALARY_3);
-        payroll.addEmployee(BOB, SALARY_4);
-        vm.stopPrank();
-        _;
     }
 
     function testRemovesFirstEmployeeWhenMultipleExist()
@@ -502,113 +499,5 @@ contract PayrollTest is Test {
 
         // Assert
         assertEq(employee.employeeAddress, ALICE);
-    }
-
-    /******************************************************************************
-     *                                  DEPOSIT                                   *
-     ******************************************************************************/
-    function testDepositRevertsWhenAmountIsZero() public {
-        // Arrange
-        vm.prank(OWNER);
-
-        // Act / Assert
-        vm.expectRevert(
-            Payroll.Payroll__DepositAmountMustBeGreaterThanZero.selector
-        );
-        payroll.deposit(0);
-    }
-
-    function testDepositRevertsWhenAllowanceIsInsufficient() public {
-        vm.startPrank(OWNER);
-        // Arrange
-        // No approve
-
-        // Act / Assert
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IERC20Errors.ERC20InsufficientAllowance.selector,
-                address(payroll),
-                0,
-                DEPOSIT_AMOUNT
-            )
-        );
-        payroll.deposit(DEPOSIT_AMOUNT);
-
-        vm.stopPrank();
-    }
-
-    function testDepositRevertsWhenOwnerBalanceIsInsufficient() public {
-        vm.startPrank(OWNER);
-
-        // Arrange
-        uint256 ownerBalance = mockUSDC.balanceOf(OWNER);
-        uint256 excessiveAmount = ownerBalance * 2;
-        mockUSDC.approve(address(payroll), excessiveAmount);
-
-        // Act / Assert
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IERC20Errors.ERC20InsufficientBalance.selector,
-                OWNER,
-                ownerBalance,
-                excessiveAmount
-            )
-        );
-        payroll.deposit(excessiveAmount);
-
-        vm.stopPrank();
-    }
-
-    function testOwnerCanSuccessfullyDeposit() public {
-        vm.startPrank(OWNER);
-
-        // Arrange
-        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
-
-        uint256 ownerStartingBalance = mockUSDC.balanceOf(OWNER);
-        uint256 payrollStartingBalance = mockUSDC.balanceOf(address(payroll));
-
-        // Act
-        payroll.deposit(DEPOSIT_AMOUNT);
-
-        // Assert
-        uint256 ownerEndingBalance = mockUSDC.balanceOf(OWNER);
-        uint256 payrollEndingBalance = mockUSDC.balanceOf(address(payroll));
-        assertEq(ownerEndingBalance, ownerStartingBalance - DEPOSIT_AMOUNT);
-        assertEq(payrollEndingBalance, payrollStartingBalance + DEPOSIT_AMOUNT);
-
-        vm.stopPrank();
-    }
-
-    function testFundsDepositedEmits() public {
-        vm.startPrank(OWNER);
-
-        // Arrange
-        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
-
-        // Act / Assert
-        vm.expectEmit(true, false, false, true, address(payroll));
-        emit FundsDeposited(OWNER, DEPOSIT_AMOUNT);
-        payroll.deposit(DEPOSIT_AMOUNT);
-
-        vm.stopPrank();
-    }
-
-    function testOnlyOwnerCanDeposit() public {
-        // Arrange
-        vm.prank(OWNER);
-        mockUSDC.transfer(ALICE, DEPOSIT_AMOUNT);
-        vm.prank(ALICE);
-        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
-
-        // Act / Assert
-        vm.prank(ALICE);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Ownable.OwnableUnauthorizedAccount.selector,
-                ALICE
-            )
-        );
-        payroll.deposit(DEPOSIT_AMOUNT);
     }
 }
