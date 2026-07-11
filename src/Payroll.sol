@@ -53,6 +53,7 @@ contract Payroll is Ownable {
         uint256 oldSalary
     );
     event FundsDeposited(address indexed owner, uint256 amount);
+    event AmountWithdrawn(address indexed owner, uint256 amount);
 
     // Errors
     error Payroll__EmployeeAlreadyExists();
@@ -65,6 +66,9 @@ contract Payroll is Ownable {
     error Payroll__SalaryUnchanged();
     error Payroll__DepositAmountMustBeGreaterThanZero();
     error Payroll__TransferFromFailed();
+    error Payroll__WithdrawalAmountMustBeGreaterThanZero();
+    error Payroll__WithdrawalAmountExceedsAvailableFunds();
+    error Payroll__WithdrawalFailed();
 
     constructor(IERC20 stablecoin) Ownable(msg.sender) {
         i_stablecoin = stablecoin;
@@ -188,7 +192,21 @@ contract Payroll is Ownable {
         emit FundsDeposited(msg.sender, amount);
     }
 
-    function withdraw() public {}
+    function withdraw(uint256 amount) external onlyOwner {
+        if (amount == 0) {
+            revert Payroll__WithdrawalAmountMustBeGreaterThanZero();
+        }
+        if (amount > i_stablecoin.balanceOf(address(this))) {
+            revert Payroll__WithdrawalAmountExceedsAvailableFunds();
+        }
+
+        bool success = i_stablecoin.transfer(msg.sender, amount);
+        if (!success) {
+            revert Payroll__WithdrawalFailed();
+        }
+
+        emit AmountWithdrawn(msg.sender, amount);
+    }
 
     function runPayroll() public {}
 
