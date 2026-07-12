@@ -55,6 +55,16 @@ contract Payroll is Ownable {
     );
     event FundsDeposited(address indexed owner, uint256 amount);
     event AmountWithdrawn(address indexed owner, uint256 amount);
+    event SalaryPaid(
+        address indexed employee,
+        uint256 salary,
+        uint256 timestamp
+    );
+    event PayrollCompleted(
+        uint256 numberOfEmployeesPaid,
+        uint256 totalAmountPaid,
+        uint256 timestamp
+    );
 
     // Errors
     error Payroll__EmployeeAlreadyExists();
@@ -72,6 +82,11 @@ contract Payroll is Ownable {
         uint256 availableFunds
     );
     error Payroll__WithdrawalFailed();
+    error Payroll__InsufficientBalanceForPayroll(
+        uint256 contractBalance,
+        uint256 totalSalaries
+    );
+    error Payroll__SalaryTransferFailed(address employeeAddress);
 
     constructor(
         IERC20 stablecoin,
@@ -228,7 +243,34 @@ contract Payroll is Ownable {
         emit AmountWithdrawn(msg.sender, amount);
     }
 
-    function runPayroll() public {}
+    function runPayroll() external onlyOwner {
+        uint256 contractBalance = i_stablecoin.balanceOf(address(this));
+        if (contractBalance < s_totalSalaries) {
+            revert Payroll__InsufficientBalanceForPayroll(
+                contractBalance,
+                s_totalSalaries
+            );
+        }
+
+        Employee[] memory allEmployees = s_employees;
+        for (uint256 i = 0; i < allEmployees.length; i++) {
+            address employeeAddress = allEmployees[i].employeeAddress;
+            uint256 salary = allEmployees[i].salary;
+
+            bool success = i_stablecoin.transfer(employeeAddress, salary);
+            if (!success) {
+                revert Payroll__SalaryTransferFailed(employeeAddress);
+            }
+
+            emit SalaryPaid(employeeAddress, salary, block.timestamp);
+        }
+
+        emit PayrollCompleted(
+            allEmployees.length,
+            s_totalSalaries,
+            block.timestamp
+        );
+    }
 
     /* Getter functions */
     function getAllEmployees()
