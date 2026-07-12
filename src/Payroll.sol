@@ -46,15 +46,28 @@ contract Payroll is Ownable {
     uint256 private s_totalSalaries;
 
     // Events
-    event NewEmployeeAdded(address indexed employee, uint256 salary);
-    event EmployeeRemoved(address indexed employee);
+    event NewEmployeeAdded(
+        address indexed employee,
+        uint256 salary,
+        uint256 timestamp
+    );
+    event EmployeeRemoved(address indexed employee, uint256 timestamp);
     event SalaryUpdated(
         address indexed employee,
         uint256 newSalary,
-        uint256 oldSalary
+        uint256 oldSalary,
+        uint256 timestamp
     );
-    event FundsDeposited(address indexed owner, uint256 amount);
-    event AmountWithdrawn(address indexed owner, uint256 amount);
+    event FundsDeposited(
+        address indexed owner,
+        uint256 amount,
+        uint256 timestamp
+    );
+    event AmountWithdrawn(
+        address indexed owner,
+        uint256 amount,
+        uint256 timestamp
+    );
     event SalaryPaid(
         address indexed employee,
         uint256 salary,
@@ -126,7 +139,11 @@ contract Payroll is Ownable {
         // Add employee's salary to total salaries
         s_totalSalaries += salary;
 
-        emit NewEmployeeAdded(newEmployee.employeeAddress, newEmployee.salary);
+        emit NewEmployeeAdded(
+            newEmployee.employeeAddress,
+            newEmployee.salary,
+            block.timestamp
+        );
     }
 
     function removeEmployee(address employeeAddress) external onlyOwner {
@@ -158,7 +175,7 @@ contract Payroll is Ownable {
         // Clear existence
         delete (s_employeeAddressToExistence[employeeAddress]);
 
-        emit EmployeeRemoved(employeeToRemove.employeeAddress);
+        emit EmployeeRemoved(employeeToRemove.employeeAddress, block.timestamp);
     }
 
     function updateSalary(
@@ -193,7 +210,12 @@ contract Payroll is Ownable {
             s_totalSalaries += newSalary - oldSalary;
         }
 
-        emit SalaryUpdated(employee.employeeAddress, newSalary, oldSalary);
+        emit SalaryUpdated(
+            employee.employeeAddress,
+            newSalary,
+            oldSalary,
+            block.timestamp
+        );
     }
 
     function deposit(uint256 amount) external onlyOwner {
@@ -212,7 +234,7 @@ contract Payroll is Ownable {
             revert Payroll__TransferFromFailed();
         }
 
-        emit FundsDeposited(msg.sender, amount);
+        emit FundsDeposited(msg.sender, amount, block.timestamp);
     }
 
     function withdraw(uint256 amount) external onlyOwner {
@@ -240,7 +262,7 @@ contract Payroll is Ownable {
             revert Payroll__WithdrawalFailed();
         }
 
-        emit AmountWithdrawn(msg.sender, amount);
+        emit AmountWithdrawn(msg.sender, amount, block.timestamp);
     }
 
     function runPayroll() external onlyOwner {

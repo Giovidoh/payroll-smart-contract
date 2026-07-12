@@ -24,8 +24,8 @@ contract IntegrationPayrollTest is Test {
     uint256 public constant SALARY_4 = 9_000 * 1e6;
 
     /* Events */
-    event FundsDeposited(address indexed owner, uint256 amount);
-    event AmountWithdrawn(address indexed owner, uint256 amount);
+    event FundsDeposited(address indexed owner, uint256 amount, uint256 timestamp);
+    event AmountWithdrawn(address indexed owner, uint256 amount, uint256 timestamp);
 
     /**
      * @dev This modifier adds multiple salaries to the payroll contract.
@@ -130,7 +130,7 @@ contract IntegrationPayrollTest is Test {
 
         // Act / Assert
         vm.expectEmit(true, false, false, true, address(payroll));
-        emit FundsDeposited(OWNER, DEPOSIT_AMOUNT);
+        emit FundsDeposited(OWNER, DEPOSIT_AMOUNT, block.timestamp);
         payroll.deposit(DEPOSIT_AMOUNT);
 
         vm.stopPrank();
@@ -315,7 +315,7 @@ contract IntegrationPayrollTest is Test {
         // Act / Assert
         uint256 withdrawalAmount = DEPOSIT_AMOUNT / 2;
         vm.expectEmit(true, false, false, true, address(payroll));
-        emit AmountWithdrawn(OWNER, withdrawalAmount);
+        emit AmountWithdrawn(OWNER, withdrawalAmount, block.timestamp);
         payroll.withdraw(withdrawalAmount);
 
         vm.stopPrank();

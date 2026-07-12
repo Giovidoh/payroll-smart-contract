@@ -22,12 +22,12 @@ contract PayrollTest is Test {
     uint256 public constant SALARY_4 = 9_000 * 1e6;
 
     /* Events */
-    event NewEmployeeAdded(address indexed employee, uint256 salary);
-    event EmployeeRemoved(address indexed employee);
+    event NewEmployeeAdded(address indexed employee, uint256 salary, uint256 timestamp);
+    event EmployeeRemoved(address indexed employee, uint256 timestamp);
     event SalaryUpdated(
         address indexed employee,
         uint256 newSalary,
-        uint256 oldSalary
+        uint256 oldSalary, uint256 timestamp
     );
 
     /**
@@ -130,7 +130,7 @@ contract PayrollTest is Test {
 
         // Act / Assert
         vm.expectEmit(true, false, false, true, address(payroll));
-        emit NewEmployeeAdded(ALICE, SALARY_1);
+        emit NewEmployeeAdded(ALICE, SALARY_1, block.timestamp);
         payroll.addEmployee(ALICE, SALARY_1);
     }
 
@@ -225,7 +225,7 @@ contract PayrollTest is Test {
 
         // Act / Assert
         vm.expectEmit(true, false, false, false, address(payroll));
-        emit EmployeeRemoved(ALICE);
+        emit EmployeeRemoved(ALICE, block.timestamp);
         payroll.removeEmployee(ALICE);
 
         vm.stopPrank();
@@ -424,7 +424,7 @@ contract PayrollTest is Test {
 
         // Act / Assert
         vm.expectEmit(true, false, false, true, address(payroll));
-        emit SalaryUpdated(ALICE, SALARY_2, SALARY_1);
+        emit SalaryUpdated(ALICE, SALARY_2, SALARY_1, block.timestamp);
         payroll.updateSalary(ALICE, SALARY_2);
 
         vm.stopPrank();
