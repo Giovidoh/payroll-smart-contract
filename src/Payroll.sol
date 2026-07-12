@@ -46,15 +46,38 @@ contract Payroll is Ownable {
     uint256 private s_totalSalaries;
 
     // Events
-    event NewEmployeeAdded(address indexed employee, uint256 salary);
-    event EmployeeRemoved(address indexed employee);
+    event NewEmployeeAdded(
+        address indexed employee,
+        uint256 salary,
+        uint256 timestamp
+    );
+    event EmployeeRemoved(address indexed employee, uint256 timestamp);
     event SalaryUpdated(
         address indexed employee,
         uint256 newSalary,
-        uint256 oldSalary
+        uint256 oldSalary,
+        uint256 timestamp
     );
-    event FundsDeposited(address indexed owner, uint256 amount);
-    event AmountWithdrawn(address indexed owner, uint256 amount);
+    event FundsDeposited(
+        address indexed owner,
+        uint256 amount,
+        uint256 timestamp
+    );
+    event AmountWithdrawn(
+        address indexed owner,
+        uint256 amount,
+        uint256 timestamp
+    );
+    event SalaryPaid(
+        address indexed employee,
+        uint256 salary,
+        uint256 timestamp
+    );
+    event PayrollCompleted(
+        uint256 numberOfEmployeesPaid,
+        uint256 totalAmountPaid,
+        uint256 timestamp
+    );
 
     // Errors
     error Payroll__EmployeeAlreadyExists();
@@ -72,6 +95,11 @@ contract Payroll is Ownable {
         uint256 availableFunds
     );
     error Payroll__WithdrawalFailed();
+    error Payroll__InsufficientBalanceForPayroll(
+        uint256 contractBalance,
+        uint256 totalSalaries
+    );
+    error Payroll__SalaryTransferFailed(address employeeAddress);
 
     constructor(
         IERC20 stablecoin,
@@ -111,7 +139,11 @@ contract Payroll is Ownable {
         // Add employee's salary to total salaries
         s_totalSalaries += salary;
 
-        emit NewEmployeeAdded(newEmployee.employeeAddress, newEmployee.salary);
+        emit NewEmployeeAdded(
+            newEmployee.employeeAddress,
+            newEmployee.salary,
+            block.timestamp
+        );
     }
 
     function removeEmployee(address employeeAddress) external onlyOwner {
@@ -143,7 +175,7 @@ contract Payroll is Ownable {
         // Clear existence
         delete (s_employeeAddressToExistence[employeeAddress]);
 
-        emit EmployeeRemoved(employeeToRemove.employeeAddress);
+        emit EmployeeRemoved(employeeToRemove.employeeAddress, block.timestamp);
     }
 
     function updateSalary(
@@ -178,7 +210,12 @@ contract Payroll is Ownable {
             s_totalSalaries += newSalary - oldSalary;
         }
 
-        emit SalaryUpdated(employee.employeeAddress, newSalary, oldSalary);
+        emit SalaryUpdated(
+            employee.employeeAddress,
+            newSalary,
+            oldSalary,
+            block.timestamp
+        );
     }
 
     function deposit(uint256 amount) external onlyOwner {
@@ -197,7 +234,7 @@ contract Payroll is Ownable {
             revert Payroll__TransferFromFailed();
         }
 
-        emit FundsDeposited(msg.sender, amount);
+        emit FundsDeposited(msg.sender, amount, block.timestamp);
     }
 
     function withdraw(uint256 amount) external onlyOwner {
@@ -225,10 +262,37 @@ contract Payroll is Ownable {
             revert Payroll__WithdrawalFailed();
         }
 
-        emit AmountWithdrawn(msg.sender, amount);
+        emit AmountWithdrawn(msg.sender, amount, block.timestamp);
     }
 
-    function runPayroll() public {}
+    function runPayroll() external onlyOwner {
+        uint256 contractBalance = i_stablecoin.balanceOf(address(this));
+        if (contractBalance < s_totalSalaries) {
+            revert Payroll__InsufficientBalanceForPayroll(
+                contractBalance,
+                s_totalSalaries
+            );
+        }
+
+        Employee[] memory allEmployees = s_employees;
+        for (uint256 i = 0; i < allEmployees.length; i++) {
+            address employeeAddress = allEmployees[i].employeeAddress;
+            uint256 salary = allEmployees[i].salary;
+
+            bool success = i_stablecoin.transfer(employeeAddress, salary);
+            if (!success) {
+                revert Payroll__SalaryTransferFailed(employeeAddress);
+            }
+
+            emit SalaryPaid(employeeAddress, salary, block.timestamp);
+        }
+
+        emit PayrollCompleted(
+            allEmployees.length,
+            s_totalSalaries,
+            block.timestamp
+        );
+    }
 
     /* Getter functions */
     function getAllEmployees()
