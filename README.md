@@ -80,7 +80,7 @@ This project is part of my ongoing Web3 developer portfolio, and also serves as 
 ### Architecture Notes
 
 - **No off-chain backend or database.** Payment history isn't stored in contract state — every payroll run emits a `SalaryPaid` event per employee. Anyone (a frontend, a block explorer, an off-chain indexer) can reconstruct full payment history by reading past events, without the contract needing to maintain redundant storage.
-- **`runPayroll()` scales linearly with employee count (O(n)).** Every employee paid in a single run adds real gas cost, since each payment is an individual token transfer. At a large enough employee count, a single `runPayroll()` call could theoretically exceed a block's gas limit. This is a known, documented limitation for this project's scope. Production systems at scale typically solve this by having each employee individually claim their own accrued salary instead of the employer pushing payment to everyone in one transaction — turning one large O(n) transaction into many small O(1) ones.
+- **`runPayroll()` scales linearly with employee count (O(n)).** Every employee paid in a single run adds real gas cost, since each payment is an individual token transfer. At a large enough employee count, a single `runPayroll()` call could theoretically exceed a block's gas limit. This is also a gas-cost tradeoff, not just a scalability one: in this push model, the owner alone pays gas for every employee's payment in one transaction. A pull/claim-based model, where each employee withdraws their own accrued salary individually, would distribute both the gas cost and the block-size risk across every employee's own transaction instead of concentrating it entirely on the employer. This is a known, documented limitation for this project's scope. Production systems at scale (Sablier, Superfluid) typically use the pull model for exactly this reason.
 - **No explicit reentrancy guard, by design.** Every state-changing function (`addEmployee`, `removeEmployee`, `updateSalary`, `deposit`, `withdraw`, `runPayroll`) is restricted to the contract owner. Since employees are never the owner, even a malicious employee contract attempting to re-enter during its own payment inside `runPayroll()` would be blocked by access control on every function it could call back into.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -139,6 +139,7 @@ The contract owner (the employer) can currently:
 - Check if an address is a registered employee — `getEmployeeExistence(address employeeAddress)`
 - Deposit stablecoin funds into the contract — `deposit(uint256 amount)` (requires an `approve()` on the stablecoin beforehand)
 - Withdraw surplus funds, above the required payroll reserve — `withdraw(uint256 amount)`
+- Check how much is currently available for withdrawal — `getAvailableAmountForWithdrawal()`
 - Pay every registered employee their salary in a single transaction — `runPayroll()`
 
 The owner and the concerned employee themselves can:
@@ -173,8 +174,8 @@ forge coverage
 
 Tests are organized by scope:
 
-- `test/unit/` — tests each function in isolation. Currently covers employee management (`addEmployee`, `removeEmployee`, `updateSalary`, `getEmployee`) and fund management (`deposit`, `withdraw`), including revert conditions, state changes, event emissions, access control, and boundary cases (e.g. removing the first/middle/last/only employee in the array, withdrawing exactly at the payroll reserve boundary).
-- `test/integration/` — will cover multiple functions working together end-to-end (e.g. deposit → run payroll → verify payments), once `runPayroll()` is tested.
+- `test/unit/` — tests each function in isolation, including its dependencies where necessary (e.g. `deposit`/`withdraw` calling into the mock stablecoin). Covers employee management (`addEmployee`, `removeEmployee`, `updateSalary`, `getEmployee`), fund management (`deposit`, `withdraw`), and payroll execution (`runPayroll`) — reverts, state changes, event emissions, access control, and boundary cases throughout.
+- `test/integration/` — verifies multiple functions working together across a realistic sequence: adding employees, funding the contract, running payroll, updating salaries mid-cycle, removing and adding employees, running payroll again, and withdrawing surplus — with every balance independently checked against hand-calculated expected values at each step.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -187,8 +188,8 @@ Tests are organized by scope:
 - [x] `updateSalary` — update an existing employee's salary
 - [x] `getEmployee` — viewable by the owner and the employee themselves
 - [x] Fund management — `deposit`, `withdraw` (ERC-20 stablecoin), with a payroll reserve protecting a fixed number of future payroll cycles from withdrawal
-- [x] `runPayroll` — implemented, tests in progress
-- [ ] Integration test suite
+- [x] `runPayroll` — implemented and fully tested
+- [x] Integration test suite — full lifecycle scenario, hand-verified
 - [ ] Deployment to Sepolia testnet
 
 See the [open issues](https://github.com/Giovidoh/payroll-smart-contract/issues) for a full list of proposed features and known issues.

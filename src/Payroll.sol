@@ -242,7 +242,7 @@ contract Payroll is Ownable {
             revert Payroll__WithdrawalAmountMustBeGreaterThanZero();
         }
 
-        uint256 requiredReserve = s_totalSalaries * i_reservedPayrollCycles;
+        uint256 requiredReserve = s_totalSalaries * i_reservedPayrollCycles; // Total amount locked that the employer can't remove for now
         uint256 contractBalance = i_stablecoin.balanceOf(address(this));
 
         if (contractBalance < requiredReserve) {
@@ -341,5 +341,15 @@ contract Payroll is Ownable {
 
     function getReservedPayrollCycles() external view returns (uint256) {
         return i_reservedPayrollCycles;
+    }
+
+    function getAvailableAmountForWithdrawal() external view returns (uint256) {
+        uint256 requiredReserve = s_totalSalaries * i_reservedPayrollCycles;
+        uint256 contractBalance = i_stablecoin.balanceOf(address(this));
+        if (contractBalance < requiredReserve) {
+            revert Payroll__WithdrawalAmountExceedsAvailableFunds(0);
+        }
+
+        return i_stablecoin.balanceOf(address(this)) - requiredReserve;
     }
 }
