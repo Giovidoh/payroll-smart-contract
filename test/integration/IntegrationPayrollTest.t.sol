@@ -24,8 +24,26 @@ contract IntegrationPayrollTest is Test {
     uint256 public constant SALARY_4 = 9_000 * 1e6;
 
     /* Events */
-    event FundsDeposited(address indexed owner, uint256 amount, uint256 timestamp);
-    event AmountWithdrawn(address indexed owner, uint256 amount, uint256 timestamp);
+    event FundsDeposited(
+        address indexed owner,
+        uint256 amount,
+        uint256 timestamp
+    );
+    event AmountWithdrawn(
+        address indexed owner,
+        uint256 amount,
+        uint256 timestamp
+    );
+    event SalaryPaid(
+        address indexed employee,
+        uint256 salary,
+        uint256 timestamp
+    );
+    event PayrollCompleted(
+        uint256 numberOfEmployeesPaid,
+        uint256 totalAmountPaid,
+        uint256 timestamp
+    );
 
     /**
      * @dev This modifier adds multiple salaries to the payroll contract.
@@ -386,5 +404,110 @@ contract IntegrationPayrollTest is Test {
         payroll.withdraw(surplus + 1); // one wei into committed funds
 
         vm.stopPrank();
+    }
+
+    /******************************************************************************
+     *                                RUN PAYROLL                                 *
+     ******************************************************************************/
+    function testRunPayrollRevertsWhenContractBalanceIsInsufficient()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        // Act / Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Payroll.Payroll__InsufficientBalanceForPayroll.selector,
+                mockUSDC.balanceOf(address(payroll)),
+                payroll.getTotalSalaries()
+            )
+        );
+        payroll.runPayroll();
+
+        vm.stopPrank();
+    }
+
+    function testRunPayrollSucceedsWithExactTotalSalaries()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        uint256 totalSalaries = payroll.getTotalSalaries();
+        mockUSDC.approve(address(payroll), totalSalaries);
+        payroll.deposit(totalSalaries);
+        uint256 payrollStartingBalance = mockUSDC.balanceOf(address(payroll));
+
+        // Act
+        payroll.runPayroll();
+        uint256 payrollEndingBalance = mockUSDC.balanceOf(address(payroll));
+
+        // Assert
+        assertEq(payrollStartingBalance, payrollEndingBalance + totalSalaries);
+        assertEq(mockUSDC.balanceOf(ALICE), payroll.getEmployee(ALICE).salary);
+        assertEq(mockUSDC.balanceOf(DAVE), payroll.getEmployee(DAVE).salary);
+        assertEq(mockUSDC.balanceOf(CAROL), payroll.getEmployee(CAROL).salary);
+        assertEq(mockUSDC.balanceOf(BOB), payroll.getEmployee(BOB).salary);
+
+        vm.stopPrank();
+    }
+
+    function testSalaryPaidEmitsForEachEmployee() public addMultipleEmployees {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act / Assert
+        Payroll.Employee[] memory employees = payroll.getAllEmployees();
+        for (uint256 i = 0; i < employees.length; i++) {
+            vm.expectEmit(true, false, false, true, address(payroll));
+            emit SalaryPaid(
+                employees[i].employeeAddress,
+                employees[i].salary,
+                block.timestamp
+            );
+        }
+        payroll.runPayroll();
+
+        vm.stopPrank();
+    }
+
+    function testPayrollCompletedEmits() public addMultipleEmployees {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act / Assert
+        Payroll.Employee[] memory employees = payroll.getAllEmployees();
+        uint256 totalSalaries = payroll.getTotalSalaries();
+        vm.expectEmit(false, false, false, true, address(payroll));
+        emit PayrollCompleted(employees.length, totalSalaries, block.timestamp);
+        payroll.runPayroll();
+
+        vm.stopPrank();
+    }
+
+    function testOnlyOwnerCanRunPayroll() public addMultipleEmployees {
+        // Arrange
+        vm.startPrank(OWNER);
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+        vm.stopPrank();
+
+        // Act / Assert
+        vm.prank(ALICE);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                ALICE
+            )
+        );
+        payroll.runPayroll();
     }
 }
