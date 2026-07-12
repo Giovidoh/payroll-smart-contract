@@ -6,12 +6,14 @@ import {DeployPayroll} from "script/DeployPayroll.s.sol";
 import {Payroll} from "src/Payroll.sol";
 import {MockUSDC} from "test/mocks/MockUSDC.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 contract PayrollTest is Test {
     DeployPayroll public deployer;
     Payroll public payroll;
     MockUSDC public mockUSDC;
     address public OWNER;
+    uint256 public constant DEPOSIT_AMOUNT = 100_000e6;
     address public ALICE = makeAddr("alice");
     uint256 public constant SALARY_1 = 500 * 1e6;
     address public DAVE = makeAddr("dave");
@@ -22,12 +24,37 @@ contract PayrollTest is Test {
     uint256 public constant SALARY_4 = 9_000 * 1e6;
 
     /* Events */
-    event NewEmployeeAdded(address indexed employee, uint256 salary, uint256 timestamp);
+    event NewEmployeeAdded(
+        address indexed employee,
+        uint256 salary,
+        uint256 timestamp
+    );
     event EmployeeRemoved(address indexed employee, uint256 timestamp);
     event SalaryUpdated(
         address indexed employee,
         uint256 newSalary,
-        uint256 oldSalary, uint256 timestamp
+        uint256 oldSalary,
+        uint256 timestamp
+    );
+    event FundsDeposited(
+        address indexed owner,
+        uint256 amount,
+        uint256 timestamp
+    );
+    event AmountWithdrawn(
+        address indexed owner,
+        uint256 amount,
+        uint256 timestamp
+    );
+    event SalaryPaid(
+        address indexed employee,
+        uint256 salary,
+        uint256 timestamp
+    );
+    event PayrollCompleted(
+        uint256 numberOfEmployeesPaid,
+        uint256 totalAmountPaid,
+        uint256 timestamp
     );
 
     /**
@@ -499,5 +526,488 @@ contract PayrollTest is Test {
 
         // Assert
         assertEq(employee.employeeAddress, ALICE);
+    }
+
+    /******************************************************************************
+     *                                  DEPOSIT                                   *
+     ******************************************************************************/
+    function testDepositRevertsWhenAmountIsZero() public {
+        // Arrange
+        vm.prank(OWNER);
+
+        // Act / Assert
+        vm.expectRevert(
+            Payroll.Payroll__DepositAmountMustBeGreaterThanZero.selector
+        );
+        payroll.deposit(0);
+    }
+
+    function testDepositRevertsWhenAllowanceIsInsufficient() public {
+        vm.startPrank(OWNER);
+        // Arrange
+        // No approve
+
+        // Act / Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IERC20Errors.ERC20InsufficientAllowance.selector,
+                address(payroll),
+                0,
+                DEPOSIT_AMOUNT
+            )
+        );
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        vm.stopPrank();
+    }
+
+    function testDepositRevertsWhenOwnerBalanceIsInsufficient() public {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        uint256 ownerBalance = mockUSDC.balanceOf(OWNER);
+        uint256 excessiveAmount = ownerBalance * 2;
+        mockUSDC.approve(address(payroll), excessiveAmount);
+
+        // Act / Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IERC20Errors.ERC20InsufficientBalance.selector,
+                OWNER,
+                ownerBalance,
+                excessiveAmount
+            )
+        );
+        payroll.deposit(excessiveAmount);
+
+        vm.stopPrank();
+    }
+
+    function testOwnerCanSuccessfullyDeposit() public {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+
+        uint256 ownerStartingBalance = mockUSDC.balanceOf(OWNER);
+        uint256 payrollStartingBalance = mockUSDC.balanceOf(address(payroll));
+
+        // Act
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // Assert
+        uint256 ownerEndingBalance = mockUSDC.balanceOf(OWNER);
+        uint256 payrollEndingBalance = mockUSDC.balanceOf(address(payroll));
+        assertEq(ownerEndingBalance, ownerStartingBalance - DEPOSIT_AMOUNT);
+        assertEq(payrollEndingBalance, payrollStartingBalance + DEPOSIT_AMOUNT);
+
+        vm.stopPrank();
+    }
+
+    function testFundsDepositedEmits() public {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+
+        // Act / Assert
+        vm.expectEmit(true, false, false, true, address(payroll));
+        emit FundsDeposited(OWNER, DEPOSIT_AMOUNT, block.timestamp);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        vm.stopPrank();
+    }
+
+    function testOnlyOwnerCanDeposit() public {
+        // Arrange
+        vm.prank(OWNER);
+        mockUSDC.transfer(ALICE, DEPOSIT_AMOUNT);
+        vm.prank(ALICE);
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+
+        // Act / Assert
+        vm.prank(ALICE);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                ALICE
+            )
+        );
+        payroll.deposit(DEPOSIT_AMOUNT);
+    }
+
+    /******************************************************************************
+     *                                  WITHDRAW                                  *
+     ******************************************************************************/
+    function testWithdrawRevertsWhenAmountIsZero() public {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act / Assert
+        vm.expectRevert(
+            Payroll.Payroll__WithdrawalAmountMustBeGreaterThanZero.selector
+        );
+        payroll.withdraw(0);
+
+        vm.stopPrank();
+    }
+
+    function testWithdrawRevertsWhenAmountExceedsSurplusAboveReserve()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act / Assert
+        uint256 requiredReserve = payroll.getTotalSalaries() *
+            payroll.getReservedPayrollCycles();
+        uint256 surplus = DEPOSIT_AMOUNT - requiredReserve;
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Payroll.Payroll__WithdrawalAmountExceedsAvailableFunds.selector,
+                surplus
+            )
+        );
+        payroll.withdraw(DEPOSIT_AMOUNT);
+
+        vm.stopPrank();
+    }
+
+    function testWithdrawRevertsWhenContractBalanceIsBelowRequiredReserve()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        // We have employees and no contract balance so contractBalance < requiredReserve
+
+        // Act / Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Payroll.Payroll__WithdrawalAmountExceedsAvailableFunds.selector,
+                0
+            )
+        );
+        payroll.withdraw(DEPOSIT_AMOUNT);
+
+        vm.stopPrank();
+    }
+
+    function testOwnerCanSuccessfullyWithdraw() public {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        uint256 ownerStartingBalance = mockUSDC.balanceOf(OWNER);
+        uint256 payrollStartingBalance = mockUSDC.balanceOf(address(payroll));
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act
+        uint256 withdrawalAmount = DEPOSIT_AMOUNT / 3;
+        payroll.withdraw(withdrawalAmount);
+
+        // Assert
+        uint256 ownerEndingBalance = mockUSDC.balanceOf(OWNER);
+        uint256 payrollEndingBalance = mockUSDC.balanceOf(address(payroll));
+        assertEq(
+            ownerEndingBalance,
+            ownerStartingBalance - DEPOSIT_AMOUNT + withdrawalAmount
+        );
+        assertEq(
+            payrollEndingBalance,
+            payrollStartingBalance + DEPOSIT_AMOUNT - withdrawalAmount
+        );
+
+        vm.stopPrank();
+    }
+
+    function testWithdrawSucceedsWithExactSurplusAboveReserve()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        uint256 ownerStartingBalance = mockUSDC.balanceOf(OWNER);
+        uint256 requiredReserve = payroll.getTotalSalaries() *
+            payroll.getReservedPayrollCycles();
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act
+        uint256 exactSurplus = DEPOSIT_AMOUNT - requiredReserve;
+        payroll.withdraw(exactSurplus);
+
+        // Assert
+        uint256 ownerEndingBalance = mockUSDC.balanceOf(OWNER);
+        uint256 payrollEndingBalance = mockUSDC.balanceOf(address(payroll));
+        assertEq(ownerEndingBalance, ownerStartingBalance - requiredReserve);
+        assertEq(payrollEndingBalance, requiredReserve);
+
+        vm.stopPrank();
+    }
+
+    function testWithdrawReservesScaleWithMultipleCycles()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        uint256 reservedPayrollCycles = 2;
+        Payroll newPayroll = new Payroll(mockUSDC, reservedPayrollCycles);
+
+        // Arrange
+        newPayroll.addEmployee(ALICE, SALARY_1);
+        newPayroll.addEmployee(DAVE, SALARY_2);
+        newPayroll.addEmployee(CAROL, SALARY_3);
+        newPayroll.addEmployee(BOB, SALARY_4);
+        mockUSDC.approve(address(newPayroll), DEPOSIT_AMOUNT);
+        newPayroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act
+        uint256 requiredReserve = newPayroll.getTotalSalaries() *
+            newPayroll.getReservedPayrollCycles();
+        uint256 surplus = DEPOSIT_AMOUNT - requiredReserve;
+        newPayroll.withdraw(surplus);
+
+        // Assert
+        assertEq(
+            mockUSDC.balanceOf(address(newPayroll)),
+            DEPOSIT_AMOUNT - surplus
+        );
+
+        vm.stopPrank();
+    }
+
+    function testAmountWithdrawnEmits() public {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act / Assert
+        uint256 withdrawalAmount = DEPOSIT_AMOUNT / 2;
+        vm.expectEmit(true, false, false, true, address(payroll));
+        emit AmountWithdrawn(OWNER, withdrawalAmount, block.timestamp);
+        payroll.withdraw(withdrawalAmount);
+
+        vm.stopPrank();
+    }
+
+    function testOnlyOwnerCanWithdrawFunds() public {
+        vm.startPrank(OWNER);
+        // Arrange
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+        vm.stopPrank();
+
+        // Act / Assert
+        vm.prank(ALICE);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                ALICE
+            )
+        );
+        payroll.withdraw(DEPOSIT_AMOUNT);
+    }
+
+    function testWithdrawSucceedsWhenReservedPayrollCyclesIsZero() public {
+        vm.startPrank(OWNER);
+
+        uint256 reservedPayrollCycles = 0;
+        Payroll newPayroll = new Payroll(mockUSDC, reservedPayrollCycles);
+
+        // Arrange
+        newPayroll.addEmployee(ALICE, SALARY_1);
+        newPayroll.addEmployee(DAVE, SALARY_2);
+        newPayroll.addEmployee(CAROL, SALARY_3);
+        newPayroll.addEmployee(BOB, SALARY_4);
+        mockUSDC.approve(address(newPayroll), DEPOSIT_AMOUNT);
+        newPayroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act
+        newPayroll.withdraw(DEPOSIT_AMOUNT); // all salaries are multiplied by 0 (reservedPayrollCycles) so no subtraction needed.
+
+        // Assert
+        assertEq(mockUSDC.balanceOf(address(newPayroll)), 0);
+
+        vm.stopPrank();
+    }
+
+    function testWithdrawRevertsWhenAmountIsOneUnitPastSurplus()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        uint256 requiredReserve = payroll.getTotalSalaries() *
+            payroll.getReservedPayrollCycles();
+        uint256 surplus = DEPOSIT_AMOUNT - requiredReserve;
+
+        // Act / Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Payroll.Payroll__WithdrawalAmountExceedsAvailableFunds.selector,
+                surplus
+            )
+        );
+        payroll.withdraw(surplus + 1); // one wei into committed funds
+
+        vm.stopPrank();
+    }
+
+    /******************************************************************************
+     *                                RUN PAYROLL                                 *
+     ******************************************************************************/
+    function testRunPayrollRevertsWhenContractBalanceIsInsufficient()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        // Act / Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Payroll.Payroll__InsufficientBalanceForPayroll.selector,
+                mockUSDC.balanceOf(address(payroll)),
+                payroll.getTotalSalaries()
+            )
+        );
+        payroll.runPayroll();
+
+        vm.stopPrank();
+    }
+
+    function testRunPayrollSucceedsWithExactTotalSalaries()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        uint256 totalSalaries = payroll.getTotalSalaries();
+        mockUSDC.approve(address(payroll), totalSalaries);
+        payroll.deposit(totalSalaries);
+        uint256 payrollStartingBalance = mockUSDC.balanceOf(address(payroll));
+
+        // Act
+        payroll.runPayroll();
+        uint256 payrollEndingBalance = mockUSDC.balanceOf(address(payroll));
+
+        // Assert
+        assertEq(payrollStartingBalance, payrollEndingBalance + totalSalaries);
+        assertEq(mockUSDC.balanceOf(ALICE), payroll.getEmployee(ALICE).salary);
+        assertEq(mockUSDC.balanceOf(DAVE), payroll.getEmployee(DAVE).salary);
+        assertEq(mockUSDC.balanceOf(CAROL), payroll.getEmployee(CAROL).salary);
+        assertEq(mockUSDC.balanceOf(BOB), payroll.getEmployee(BOB).salary);
+
+        vm.stopPrank();
+    }
+
+    function testSalaryPaidEmitsForEachEmployee() public addMultipleEmployees {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act / Assert
+        Payroll.Employee[] memory employees = payroll.getAllEmployees();
+        for (uint256 i = 0; i < employees.length; i++) {
+            vm.expectEmit(true, false, false, true, address(payroll));
+            emit SalaryPaid(
+                employees[i].employeeAddress,
+                employees[i].salary,
+                block.timestamp
+            );
+        }
+        payroll.runPayroll();
+
+        vm.stopPrank();
+    }
+
+    function testPayrollCompletedEmits() public addMultipleEmployees {
+        vm.startPrank(OWNER);
+
+        // Arrange
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act / Assert
+        Payroll.Employee[] memory employees = payroll.getAllEmployees();
+        uint256 totalSalaries = payroll.getTotalSalaries();
+        vm.expectEmit(false, false, false, true, address(payroll));
+        emit PayrollCompleted(employees.length, totalSalaries, block.timestamp);
+        payroll.runPayroll();
+
+        vm.stopPrank();
+    }
+
+    function testOnlyOwnerCanRunPayroll() public addMultipleEmployees {
+        // Arrange
+        vm.startPrank(OWNER);
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+        vm.stopPrank();
+
+        // Act / Assert
+        vm.prank(ALICE);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                ALICE
+            )
+        );
+        payroll.runPayroll();
+    }
+
+    function testRunPayrollRevertsWhenBalanceIsOneUnitShort()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+        uint256 totalSalaries = payroll.getTotalSalaries();
+        mockUSDC.approve(address(payroll), totalSalaries - 1);
+        payroll.deposit(totalSalaries - 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Payroll.Payroll__InsufficientBalanceForPayroll.selector,
+                totalSalaries - 1,
+                totalSalaries
+            )
+        );
+        payroll.runPayroll();
+        vm.stopPrank();
+    }
+
+    function testEmployeesStillRegisteredAfterPayroll()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+        uint256 totalSalaries = payroll.getTotalSalaries();
+        mockUSDC.approve(address(payroll), totalSalaries);
+        payroll.deposit(totalSalaries);
+
+        payroll.runPayroll();
+
+        assertEq(payroll.getAllEmployees().length, 4);
+        assertEq(payroll.getTotalSalaries(), totalSalaries); // unchanged — payroll doesn't remove obligations
+        vm.stopPrank();
     }
 }
