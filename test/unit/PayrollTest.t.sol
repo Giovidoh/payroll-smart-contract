@@ -755,6 +755,25 @@ contract PayrollTest is Test {
         vm.stopPrank();
     }
 
+    function testWithdrawEverythingWhenNoEmployeesRemain() public {
+        vm.startPrank(OWNER);
+
+        //Arrange
+        uint256 ownerStartingBalance = mockUSDC.balanceOf(OWNER);
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // Act
+        payroll.withdraw(DEPOSIT_AMOUNT);
+
+        // Assert
+        uint256 ownerEndingBalance = mockUSDC.balanceOf(OWNER);
+        assertEq(ownerStartingBalance, ownerEndingBalance);
+        assertEq(mockUSDC.balanceOf(address(payroll)), 0);
+
+        vm.stopPrank();
+    }
+
     function testWithdrawReservesScaleWithMultipleCycles()
         public
         addMultipleEmployees
