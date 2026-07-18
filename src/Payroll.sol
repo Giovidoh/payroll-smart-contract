@@ -28,9 +28,10 @@
 pragma solidity ^0.8.18;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Payroll is Ownable {
+contract Payroll is Ownable2Step {
     // Type declarations
     struct Employee {
         address employeeAddress;

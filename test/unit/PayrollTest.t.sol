@@ -77,6 +77,65 @@ contract PayrollTest is Test {
     }
 
     /******************************************************************************
+     *                             OWNERSHIP TRANSFER                             *
+     ******************************************************************************/
+    function testTransferOwnershipDoesNotTakeEffectImmediately() public {
+        // Act
+        vm.prank(OWNER);
+        payroll.transferOwnership(ALICE);
+
+        // Assert
+        assertEq(OWNER, payroll.owner());
+    }
+
+    function testNewOwnerMustAcceptOwnership() public {
+        // Arrange
+        vm.prank(OWNER);
+        payroll.transferOwnership(ALICE);
+
+        // Act
+        vm.prank(ALICE);
+        payroll.acceptOwnership();
+
+        // Assert
+        assertEq(ALICE, payroll.owner());
+    }
+
+    function testOldOwnerLosesAccessAfterAcceptance() public {
+        // Arrange
+        vm.prank(OWNER);
+        payroll.transferOwnership(ALICE);
+        vm.prank(ALICE);
+        payroll.acceptOwnership();
+
+        // Act / Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                OWNER
+            )
+        );
+        vm.prank(OWNER);
+        payroll.addEmployee(BOB, SALARY_1);
+    }
+
+    function testOnlyPendingOwnerCanAccept() public {
+        // Arrange
+        vm.prank(OWNER);
+        payroll.transferOwnership(ALICE);
+
+        // Act
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                OWNER
+            )
+        );
+        vm.prank(OWNER);
+        payroll.acceptOwnership();
+    }
+
+    /******************************************************************************
      *                                ADD EMPLOYEE                                *
      ******************************************************************************/
     function testRevertsWhenEmployeeExists() public {
