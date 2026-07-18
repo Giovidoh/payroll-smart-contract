@@ -45,6 +45,8 @@ contract Payroll is Ownable2Step {
     mapping(address => uint256) private s_employeeAddressToIndex;
     mapping(address => bool) private s_employeeAddressToExistence;
     uint256 private s_totalSalaries;
+    uint256 private s_lastPayrollTimestamp;
+    uint256 private immutable i_payrollInterval;
 
     // Events
     event NewEmployeeAdded(
@@ -101,13 +103,17 @@ contract Payroll is Ownable2Step {
         uint256 totalSalaries
     );
     error Payroll__SalaryTransferFailed(address employeeAddress);
+    error Payroll__TooEarlyForNextPayroll(uint256 nextEligibleTimestamp);
 
     constructor(
         IERC20 stablecoin,
-        uint256 reservedPayrollCycles
+        uint256 reservedPayrollCycles,
+        uint256 payrollInterval
     ) Ownable(msg.sender) {
         i_stablecoin = stablecoin;
         i_reservedPayrollCycles = reservedPayrollCycles;
+        i_payrollInterval = payrollInterval;
+        s_lastPayrollTimestamp = block.timestamp; // starts the clock at deployment
     }
 
     function addEmployee(
@@ -266,7 +272,14 @@ contract Payroll is Ownable2Step {
         emit AmountWithdrawn(msg.sender, amount, block.timestamp);
     }
 
-    function runPayroll() external onlyOwner {
+    function runPayroll() external {
+        // Revert if it's not yet time to make run payroll
+        if (block.timestamp - s_lastPayrollTimestamp < i_payrollInterval) {
+            revert Payroll__TooEarlyForNextPayroll(
+                s_lastPayrollTimestamp + i_payrollInterval
+            );
+        }
+
         uint256 contractBalance = i_stablecoin.balanceOf(address(this));
         if (contractBalance < s_totalSalaries) {
             revert Payroll__InsufficientBalanceForPayroll(
