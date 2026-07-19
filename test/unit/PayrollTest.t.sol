@@ -12,6 +12,9 @@ contract PayrollTest is Test {
     DeployPayroll public deployer;
     Payroll public payroll;
     MockUSDC public mockUSDC;
+    uint256 public reservedPayrollCycles;
+    uint256 public payrollIntervalInDays;
+    uint256 public calculatedNextPayroll;
     address public OWNER;
     uint256 public constant DEPOSIT_AMOUNT = 100_000e6;
     address public ALICE = makeAddr("alice");
@@ -72,8 +75,29 @@ contract PayrollTest is Test {
 
     function setUp() public {
         deployer = new DeployPayroll();
-        (payroll, mockUSDC) = deployer.run();
+        (
+            payroll,
+            mockUSDC,
+            reservedPayrollCycles,
+            payrollIntervalInDays
+        ) = deployer.run();
+
+        calculatedNextPayroll =
+            block.timestamp +
+            payrollIntervalInDays *
+            1 days +
+            1;
+
         OWNER = payroll.owner();
+    }
+
+    /**
+     * @dev This function warp the time to the next possible payroll date.
+     */
+    function warpTimeToNextPayroll() internal {
+        // Warp time before doing the payroll again
+        vm.warp(calculatedNextPayroll);
+        vm.roll(block.number);
     }
 
     /******************************************************************************
@@ -839,8 +863,11 @@ contract PayrollTest is Test {
     {
         vm.startPrank(OWNER);
 
-        uint256 reservedPayrollCycles = 2;
-        Payroll newPayroll = new Payroll(mockUSDC, reservedPayrollCycles);
+        Payroll newPayroll = new Payroll(
+            mockUSDC,
+            reservedPayrollCycles,
+            payrollIntervalInDays
+        );
 
         // Arrange
         newPayroll.addEmployee(ALICE, SALARY_1);
@@ -902,8 +929,7 @@ contract PayrollTest is Test {
     function testWithdrawSucceedsWhenReservedPayrollCyclesIsZero() public {
         vm.startPrank(OWNER);
 
-        uint256 reservedPayrollCycles = 0;
-        Payroll newPayroll = new Payroll(mockUSDC, reservedPayrollCycles);
+        Payroll newPayroll = new Payroll(mockUSDC, 0, payrollIntervalInDays);
 
         // Arrange
         newPayroll.addEmployee(ALICE, SALARY_1);
@@ -958,6 +984,7 @@ contract PayrollTest is Test {
         vm.startPrank(OWNER);
 
         // Act / Assert
+        warpTimeToNextPayroll();
         vm.expectRevert(
             abi.encodeWithSelector(
                 Payroll.Payroll__InsufficientBalanceForPayroll.selector,
@@ -967,6 +994,54 @@ contract PayrollTest is Test {
         );
         payroll.runPayroll();
 
+        vm.stopPrank();
+    }
+
+    function testRunPayrollCannotBeCalledTwiceBeforeNextInterval()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+
+        // 1st call of run payroll
+        warpTimeToNextPayroll();
+        payroll.runPayroll();
+
+        // 2nd call of run payroll
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Payroll.Payroll__TooEarlyForNextPayroll.selector,
+                payroll.getLastPayrollTimestamp() +
+                    payrollIntervalInDays *
+                    1 days
+            )
+        );
+        payroll.runPayroll();
+
+        vm.stopPrank();
+    }
+
+    function testAnyoneCanCallRunPayrollAfterIntervalPasses()
+        public
+        addMultipleEmployees
+    {
+        vm.startPrank(OWNER);
+        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
+        payroll.deposit(DEPOSIT_AMOUNT);
+        vm.stopPrank();
+
+        vm.prank(ALICE);
+        warpTimeToNextPayroll();
+        payroll.runPayroll();
+
+        vm.startPrank(OWNER);
+        assertEq(mockUSDC.balanceOf(ALICE), payroll.getEmployee(ALICE).salary);
+        assertEq(mockUSDC.balanceOf(DAVE), payroll.getEmployee(DAVE).salary);
+        assertEq(mockUSDC.balanceOf(CAROL), payroll.getEmployee(CAROL).salary);
+        assertEq(mockUSDC.balanceOf(BOB), payroll.getEmployee(BOB).salary);
         vm.stopPrank();
     }
 
@@ -983,6 +1058,7 @@ contract PayrollTest is Test {
         uint256 payrollStartingBalance = mockUSDC.balanceOf(address(payroll));
 
         // Act
+        warpTimeToNextPayroll();
         payroll.runPayroll();
         uint256 payrollEndingBalance = mockUSDC.balanceOf(address(payroll));
 
@@ -1010,9 +1086,10 @@ contract PayrollTest is Test {
             emit SalaryPaid(
                 employees[i].employeeAddress,
                 employees[i].salary,
-                block.timestamp
+                calculatedNextPayroll
             );
         }
+        warpTimeToNextPayroll();
         payroll.runPayroll();
 
         vm.stopPrank();
@@ -1029,28 +1106,15 @@ contract PayrollTest is Test {
         Payroll.Employee[] memory employees = payroll.getAllEmployees();
         uint256 totalSalaries = payroll.getTotalSalaries();
         vm.expectEmit(false, false, false, true, address(payroll));
-        emit PayrollCompleted(employees.length, totalSalaries, block.timestamp);
-        payroll.runPayroll();
-
-        vm.stopPrank();
-    }
-
-    function testOnlyOwnerCanRunPayroll() public addMultipleEmployees {
-        // Arrange
-        vm.startPrank(OWNER);
-        mockUSDC.approve(address(payroll), DEPOSIT_AMOUNT);
-        payroll.deposit(DEPOSIT_AMOUNT);
-        vm.stopPrank();
-
-        // Act / Assert
-        vm.prank(ALICE);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Ownable.OwnableUnauthorizedAccount.selector,
-                ALICE
-            )
+        emit PayrollCompleted(
+            employees.length,
+            totalSalaries,
+            calculatedNextPayroll
         );
+        warpTimeToNextPayroll();
         payroll.runPayroll();
+
+        vm.stopPrank();
     }
 
     function testRunPayrollRevertsWhenBalanceIsOneUnitShort()
@@ -1069,6 +1133,7 @@ contract PayrollTest is Test {
                 totalSalaries
             )
         );
+        warpTimeToNextPayroll();
         payroll.runPayroll();
         vm.stopPrank();
     }
@@ -1082,6 +1147,7 @@ contract PayrollTest is Test {
         mockUSDC.approve(address(payroll), totalSalaries);
         payroll.deposit(totalSalaries);
 
+        warpTimeToNextPayroll();
         payroll.runPayroll();
 
         assertEq(payroll.getAllEmployees().length, 4);

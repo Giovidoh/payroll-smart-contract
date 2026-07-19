@@ -104,15 +104,19 @@ contract Payroll is Ownable2Step {
     );
     error Payroll__SalaryTransferFailed(address employeeAddress);
     error Payroll__TooEarlyForNextPayroll(uint256 nextEligibleTimestamp);
+    error Payroll__PayrollIntervalMustBeGreaterThanZero();
 
     constructor(
         IERC20 stablecoin,
         uint256 reservedPayrollCycles,
-        uint256 payrollInterval
+        uint256 payrollIntervalInDays // In days
     ) Ownable(msg.sender) {
+        if (payrollIntervalInDays == 0) {
+            revert Payroll__PayrollIntervalMustBeGreaterThanZero();
+        }
         i_stablecoin = stablecoin;
         i_reservedPayrollCycles = reservedPayrollCycles;
-        i_payrollInterval = payrollInterval;
+        i_payrollInterval = payrollIntervalInDays * 1 days;
         s_lastPayrollTimestamp = block.timestamp; // starts the clock at deployment
     }
 
@@ -280,6 +284,7 @@ contract Payroll is Ownable2Step {
             );
         }
 
+        // aderyn-fp-next-line(reentrancy-state-change)
         uint256 contractBalance = i_stablecoin.balanceOf(address(this));
         if (contractBalance < s_totalSalaries) {
             revert Payroll__InsufficientBalanceForPayroll(
@@ -287,6 +292,9 @@ contract Payroll is Ownable2Step {
                 s_totalSalaries
             );
         }
+
+        // Update last payroll timestamp
+        s_lastPayrollTimestamp = block.timestamp;
 
         Employee[] memory allEmployees = s_employees;
         for (uint256 i = 0; i < allEmployees.length; i++) {
@@ -365,5 +373,13 @@ contract Payroll is Ownable2Step {
         }
 
         return i_stablecoin.balanceOf(address(this)) - requiredReserve;
+    }
+
+    function getPayrollInterval() external view returns (uint256) {
+        return i_payrollInterval;
+    }
+
+    function getLastPayrollTimestamp() external view returns (uint256) {
+        return s_lastPayrollTimestamp;
     }
 }
