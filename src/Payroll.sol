@@ -28,9 +28,10 @@
 pragma solidity ^0.8.18;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Payroll is Ownable {
+contract Payroll is Ownable2Step {
     // Type declarations
     struct Employee {
         address employeeAddress;
@@ -44,6 +45,8 @@ contract Payroll is Ownable {
     mapping(address => uint256) private s_employeeAddressToIndex;
     mapping(address => bool) private s_employeeAddressToExistence;
     uint256 private s_totalSalaries;
+    uint256 private s_lastPayrollTimestamp;
+    uint256 private immutable i_payrollInterval;
 
     // Events
     event NewEmployeeAdded(
@@ -100,13 +103,21 @@ contract Payroll is Ownable {
         uint256 totalSalaries
     );
     error Payroll__SalaryTransferFailed(address employeeAddress);
+    error Payroll__TooEarlyForNextPayroll(uint256 nextEligibleTimestamp);
+    error Payroll__PayrollIntervalMustBeGreaterThanZero();
 
     constructor(
         IERC20 stablecoin,
-        uint256 reservedPayrollCycles
+        uint256 reservedPayrollCycles,
+        uint256 payrollIntervalInDays // In days
     ) Ownable(msg.sender) {
+        if (payrollIntervalInDays == 0) {
+            revert Payroll__PayrollIntervalMustBeGreaterThanZero();
+        }
         i_stablecoin = stablecoin;
         i_reservedPayrollCycles = reservedPayrollCycles;
+        i_payrollInterval = payrollIntervalInDays * 1 days;
+        s_lastPayrollTimestamp = block.timestamp; // starts the clock at deployment
     }
 
     function addEmployee(
@@ -265,7 +276,15 @@ contract Payroll is Ownable {
         emit AmountWithdrawn(msg.sender, amount, block.timestamp);
     }
 
-    function runPayroll() external onlyOwner {
+    function runPayroll() external {
+        // Revert if it's not yet time to make run payroll
+        if (block.timestamp - s_lastPayrollTimestamp < i_payrollInterval) {
+            revert Payroll__TooEarlyForNextPayroll(
+                s_lastPayrollTimestamp + i_payrollInterval
+            );
+        }
+
+        // aderyn-fp-next-line(reentrancy-state-change)
         uint256 contractBalance = i_stablecoin.balanceOf(address(this));
         if (contractBalance < s_totalSalaries) {
             revert Payroll__InsufficientBalanceForPayroll(
@@ -273,6 +292,9 @@ contract Payroll is Ownable {
                 s_totalSalaries
             );
         }
+
+        // Update last payroll timestamp
+        s_lastPayrollTimestamp = block.timestamp;
 
         Employee[] memory allEmployees = s_employees;
         for (uint256 i = 0; i < allEmployees.length; i++) {
@@ -351,5 +373,13 @@ contract Payroll is Ownable {
         }
 
         return i_stablecoin.balanceOf(address(this)) - requiredReserve;
+    }
+
+    function getPayrollInterval() external view returns (uint256) {
+        return i_payrollInterval;
+    }
+
+    function getLastPayrollTimestamp() external view returns (uint256) {
+        return s_lastPayrollTimestamp;
     }
 }
