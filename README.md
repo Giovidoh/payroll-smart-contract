@@ -39,6 +39,7 @@
         <li><a href="#built-with">Built With</a></li>
         <li><a href="#architecture-notes">Architecture Notes</a></li>
         <li><a href="#known-limitations--future-improvements">Known Limitations & Future Improvements</a></li>
+        <li><a href="#live-sepolia-deployments">Live Sepolia Deployments</a></li>
       </ul>
     </li>
     <li>
@@ -83,7 +84,7 @@ This project is part of my ongoing Web3 developer portfolio, and also serves as 
 - **No off-chain backend or database.** Payment history isn't stored in contract state — every payroll run emits a `SalaryPaid` event per employee. Anyone (a frontend, a block explorer, an off-chain indexer) can reconstruct full payment history by reading past events, without the contract needing to maintain redundant storage.
 - **`runPayroll()` scales linearly with employee count (O(n)).** Every employee paid in a single run adds real gas cost, since each payment is an individual token transfer. At a large enough employee count, a single `runPayroll()` call could theoretically exceed a block's gas limit. This is also a gas-cost tradeoff, not just a scalability one: in this push model, whoever calls `runPayroll()` pays gas for every employee's payment in one transaction. A pull/claim-based model, where each employee withdraws their own accrued salary individually, would distribute both the gas cost and the block-size risk across every employee's own transaction instead of concentrating it entirely on one caller. This is a known, documented limitation for this project's scope. Production systems at scale (Sablier, Superfluid) typically use the pull model for exactly this reason.
 - **Ownership uses a two-step transfer (`Ownable2Step`).** A single accidental `transferOwnership()` call to a wrong or unreachable address cannot lock the contract, since the new address must explicitly call `acceptOwnership()` before control actually changes hands. This does not protect against permanent loss of the current owner's private key — see Known Limitations below.
-- **No explicit reentrancy guard.** _(Note: this section is being revised as `runPayroll()` transitions to a permissionless, interval-gated design — see Known Limitations. As of the current committed contract, every state-changing function including `runPayroll()` remains restricted to the contract owner, which structurally blocks reentrancy since no employee address is ever the owner.)_
+- **`runPayroll()` is intentionally permissionless, gated by a minimum interval instead of `onlyOwner`.** Anyone can call it, but only once every `i_payrollInterval` seconds since the last successful run, tracked via `s_lastPayrollTimestamp`. This prevents an owner from indefinitely withholding payment by simply never calling the function, while the interval guard prevents the same cycle from being paid twice. `s_lastPayrollTimestamp` is updated **before** the payment loop executes (Checks-Effects-Interactions) — this is what provides reentrancy protection for this specific function, since it's the one function in the contract not restricted by `onlyOwner`. Every other state-changing function remains owner-gated, which structurally blocks reentrancy there, since no employee address is ever the owner.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -95,7 +96,24 @@ This section documents deliberate scope decisions and known tradeoffs, kept here
 - **The owner can bypass the payroll reserve by self-registering as an employee.** Since `runPayroll()` pays out based solely on the current employee list and `s_totalSalaries`, without distinguishing legitimate employees from the owner themselves, an owner could add their own address as an "employee" and extract funds via `runPayroll()` that `withdraw()`'s reserve check would otherwise have blocked. This is not unique to smart contracts — any single administrator with full control over both the employee list and payment execution can create "ghost employees" in a traditional payroll system too. Proper mitigation requires separation of duties: a multisig owner, a timelock on employee list changes, or splitting "who can manage employees" from "who can trigger payment" into distinct roles. Out of scope for the current version; the clearest next step for hardening this contract.
 - **No salary proration for employees added mid-cycle.** An employee added at any point before `runPayroll()` executes receives their full salary for that cycle — the contract does not track how much of the cycle they were actually registered for. This is a deliberate simplification: proration would require storing a `joinedTimestamp` per employee and calculating a partial amount per person during payroll execution, a real feature addition rather than a quick fix. Full salary regardless of join timing was chosen for this version; proration is a natural v2 candidate.
 - **`payrollInterval` is a fixed duration in seconds, not calendar-aware.** A "monthly" interval is implemented as a flat 30-day duration (`2,592,000` seconds), not an actual calendar month. Since real months vary from 28 to 31 days, a contract run consistently on a 30-day interval will slowly drift relative to a real calendar's 1st-of-the-month over time. Calendar-aware scheduling would require off-chain coordination or a more complex on-chain date library, out of scope here.
-- **`runPayroll()` liveness depends on someone calling it.** _(In progress — see Roadmap.)_ The current design is being updated so `runPayroll()` is callable by anyone, not just the owner, gated by a minimum interval (`i_payrollInterval`) since the last successful run rather than by `onlyOwner`. This prevents an owner from indefinitely withholding payment simply by never calling the function, while the interval guard prevents the same cycle from being paid twice by anyone spamming the call. `s_lastPayrollTimestamp` is updated before the payment loop executes (Checks-Effects-Interactions), which is what will provide reentrancy protection for this specific function once it becomes permissionless — not `onlyOwner` gating, which currently provides it instead.
+- **Missed payroll cycles are not paid retroactively.** If `runPayroll()` isn't called for longer than one interval — say, 60 days pass instead of 30 — the next successful call pays out exactly one cycle's worth, then resets `s_lastPayrollTimestamp` to the current time. The cycle that was skipped in between is never paid; that pay simply disappears rather than accumulating. A correct fix would track how many full intervals have elapsed, pay `salary × cyclesElapsed` per employee, and advance `s_lastPayrollTimestamp` by whole intervals (not to `block.timestamp`) to keep the schedule anchored rather than drifting forward every time a call is late. This wasn't built because it compounds two other documented limitations rather than existing in isolation: without proration, an employee added right before a large catch-up run would receive multiple cycles of pay for a fraction of the time worked, and the ghost-employee reserve bypass above becomes more severe if an owner can trigger one large catch-up payment instead of many small ones. Solving this properly means addressing it alongside proration and reserve enforcement, not as a standalone patch.
+- **Interval guard requires waiting the full interval on a live network.** Unlike local Foundry tests, which can warp time instantly with `vm.warp`, a real deployment has no such shortcut — `runPayroll()` genuinely cannot be called until real time has passed. See Live Sepolia Deployments below for a separate demo deployment with a shortened interval, used specifically to demonstrate the full payroll cycle without a month-long wait.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+### Live Sepolia Deployments
+
+**Production configuration** (30-day interval, 3 reserved cycles — realistic values for actual use):
+
+- Payroll: [`0xF9D4069037bAa86E9a145d7d2CaF3feD4528F096`](https://sepolia.etherscan.io/address/0xF9D4069037bAa86E9a145d7d2CaF3feD4528F096)
+- MockUSDC: [`0x2ECB0a2db5bD6E42D9943C3EE9Cf9A4e17a7A18e`](https://sepolia.etherscan.io/address/0x2ECB0a2db5bD6E42D9943C3EE9Cf9A4e17a7A18e)
+
+**Demo configuration** (1-day interval — exists purely so the full payroll cycle, including the interval guard, can be tested and demonstrated end-to-end without a real month-long wait):
+
+- Payroll: `<pending>`
+- MockUSDC: `<pending>`
+
+Both are real deployments on Sepolia, not simulations — every transaction is publicly verifiable.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -135,7 +153,13 @@ This section documents deliberate scope decisions and known tradeoffs, kept here
    forge test
 ```
 
-Deployment instructions (local + testnet) will be added once the contract is ready to deploy.
+### Deployment
+
+```sh
+make install       # install dependencies
+make deploy-anvil   # deploy locally
+make deploy-sepolia  # deploy to Sepolia (requires SEPOLIA_RPC_URL and ETHERSCAN_API_KEY in .env)
+```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -154,8 +178,11 @@ The contract owner (the employer) can currently:
 - Deposit stablecoin funds into the contract — `deposit(uint256 amount)` (requires an `approve()` on the stablecoin beforehand)
 - Withdraw surplus funds, above the required payroll reserve — `withdraw(uint256 amount)`
 - Check how much is currently available for withdrawal — `getAvailableAmountForWithdrawal()`
-- Pay every registered employee their salary in a single transaction — `runPayroll()` _(transitioning to a permissionless, interval-gated call — see Known Limitations)_
 - Transfer ownership safely via a two-step process — `transferOwnership(address)` followed by the new owner's own `acceptOwnership()` call
+
+**Anyone** can:
+
+- Trigger a payroll run — `runPayroll()` — once every `i_payrollInterval` seconds since the last successful run. Pays every registered employee their salary in a single transaction.
 
 The owner and the concerned employee themselves can:
 
@@ -189,7 +216,7 @@ forge coverage
 
 Tests are organized by scope:
 
-- `test/unit/` — tests each function in isolation, including its dependencies where necessary (e.g. `deposit`/`withdraw` calling into the mock stablecoin). Covers employee management (`addEmployee`, `removeEmployee`, `updateSalary`, `getEmployee`), fund management (`deposit`, `withdraw`), payroll execution (`runPayroll`), and ownership transfer (`Ownable2Step`) — reverts, state changes, event emissions, access control, and boundary cases throughout.
+- `test/unit/` — tests each function in isolation, including its dependencies where necessary (e.g. `deposit`/`withdraw` calling into the mock stablecoin). Covers employee management (`addEmployee`, `removeEmployee`, `updateSalary`, `getEmployee`), fund management (`deposit`, `withdraw`), payroll execution (`runPayroll`, including the interval guard), and ownership transfer (`Ownable2Step`) — reverts, state changes, event emissions, access control, and boundary cases throughout.
 - `test/integration/` — verifies multiple functions working together across a realistic sequence: adding employees, funding the contract, running payroll, updating salaries mid-cycle, removing and adding employees, running payroll again, and withdrawing surplus — with every balance independently checked against hand-calculated expected values at each step.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -206,8 +233,10 @@ Tests are organized by scope:
 - [x] `runPayroll` — implemented and fully tested
 - [x] Integration test suite — full lifecycle scenario, hand-verified
 - [x] Two-step ownership transfer (`Ownable2Step`) — 4 tests, including proof that acceptance is required and the old owner genuinely loses access
-- [x] Payroll interval guard — make `runPayroll()` permissionless, gated by a minimum interval since the last run
-- [ ] Deployment to Sepolia testnet
+- [x] Payroll interval guard — `runPayroll()` is permissionless, gated by a minimum interval since the last run
+- [x] Deployment to Sepolia testnet — production and demo configurations, both verified
+- [ ] Catch-up payment logic for missed cycles — see Known Limitations
+- [ ] Salary proration for employees added mid-cycle
 
 See the [open issues](https://github.com/Giovidoh/payroll-smart-contract/issues) for a full list of proposed features and known issues.
 
