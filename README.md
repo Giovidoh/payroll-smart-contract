@@ -110,8 +110,8 @@ This section documents deliberate scope decisions and known tradeoffs, kept here
 
 **Demo configuration** (1-day interval — exists purely so the full payroll cycle, including the interval guard, can be tested and demonstrated end-to-end without a real month-long wait):
 
-- Payroll: `<pending>`
-- MockUSDC: `<pending>`
+- Payroll: [`0x30cc1644fe776f95CFBf7c62c68cC69e1BDeE5E8`](https://sepolia.etherscan.io/address/0x30cc1644fe776f95CFBf7c62c68cC69e1BDeE5E8)
+- MockUSDC: [`0xE95cb6E641A7a6890DF341A0Fc90a483AB2f52B5`](https://sepolia.etherscan.io/address/0xE95cb6E641A7a6890DF341A0Fc90a483AB2f52B5)
 
 Both are real deployments on Sepolia, not simulations — every transaction is publicly verifiable.
 
