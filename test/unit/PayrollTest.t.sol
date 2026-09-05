@@ -13,7 +13,7 @@ contract PayrollTest is Test {
     Payroll public payroll;
     MockUSDC public mockUSDC;
     uint256 public reservedPayrollCycles;
-    uint256 public payrollIntervalInDays;
+    uint256 public payrollIntervalInSeconds;
     uint256 public calculatedNextPayroll;
     address public OWNER;
     uint256 public constant DEPOSIT_AMOUNT = 100_000e6;
@@ -79,14 +79,10 @@ contract PayrollTest is Test {
             payroll,
             mockUSDC,
             reservedPayrollCycles,
-            payrollIntervalInDays
+            payrollIntervalInSeconds
         ) = deployer.run();
 
-        calculatedNextPayroll =
-            block.timestamp +
-            payrollIntervalInDays *
-            1 days +
-            1;
+        calculatedNextPayroll = block.timestamp + payrollIntervalInSeconds + 1;
 
         OWNER = payroll.owner();
     }
@@ -866,7 +862,7 @@ contract PayrollTest is Test {
         Payroll newPayroll = new Payroll(
             mockUSDC,
             reservedPayrollCycles,
-            payrollIntervalInDays
+            payrollIntervalInSeconds
         );
 
         // Arrange
@@ -929,7 +925,7 @@ contract PayrollTest is Test {
     function testWithdrawSucceedsWhenReservedPayrollCyclesIsZero() public {
         vm.startPrank(OWNER);
 
-        Payroll newPayroll = new Payroll(mockUSDC, 0, payrollIntervalInDays);
+        Payroll newPayroll = new Payroll(mockUSDC, 0, payrollIntervalInSeconds);
 
         // Arrange
         newPayroll.addEmployee(ALICE, SALARY_1);
@@ -1015,8 +1011,7 @@ contract PayrollTest is Test {
             abi.encodeWithSelector(
                 Payroll.Payroll__TooEarlyForNextPayroll.selector,
                 payroll.getLastPayrollTimestamp() +
-                    payrollIntervalInDays *
-                    1 days
+                    payrollIntervalInSeconds
             )
         );
         payroll.runPayroll();

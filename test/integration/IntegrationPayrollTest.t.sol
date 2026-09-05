@@ -11,7 +11,7 @@ contract IntegrationPayrollTest is Test {
     Payroll public payroll;
     MockUSDC public mockUSDC;
     uint256 public reservedPayrollCycles;
-    uint256 public payrollIntervalInDays;
+    uint256 public payrollIntervalInSeconds;
     address public OWNER;
     uint256 public constant DEPOSIT_AMOUNT = 100_000e6;
     address public ALICE = makeAddr("alice");
@@ -31,7 +31,7 @@ contract IntegrationPayrollTest is Test {
             payroll,
             mockUSDC,
             reservedPayrollCycles,
-            payrollIntervalInDays
+            payrollIntervalInSeconds
         ) = deployer.run();
 
         OWNER = payroll.owner();
@@ -42,7 +42,7 @@ contract IntegrationPayrollTest is Test {
      */
     function warpTimeToNextPayroll() internal {
         // Warp time before doing the payroll again
-        vm.warp(block.timestamp + payrollIntervalInDays * 1 days + 1);
+        vm.warp(block.timestamp + payrollIntervalInSeconds + 1);
         vm.roll(block.number);
     }
 
@@ -60,7 +60,7 @@ contract IntegrationPayrollTest is Test {
         payroll.deposit(DEPOSIT_AMOUNT);
 
         // Warp time before doing the payroll again
-        vm.warp(block.timestamp + payrollIntervalInDays * 1 days + 1);
+        vm.warp(block.timestamp + payrollIntervalInSeconds + 1);
         vm.roll(block.number);
 
         // Run payroll
