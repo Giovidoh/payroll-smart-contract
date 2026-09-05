@@ -109,14 +109,14 @@ contract Payroll is Ownable2Step {
     constructor(
         IERC20 stablecoin,
         uint256 reservedPayrollCycles,
-        uint256 payrollIntervalInDays // In days
+        uint256 payrollIntervalInSeconds // In seconds
     ) Ownable(msg.sender) {
-        if (payrollIntervalInDays == 0) {
+        if (payrollIntervalInSeconds == 0) {
             revert Payroll__PayrollIntervalMustBeGreaterThanZero();
         }
         i_stablecoin = stablecoin;
         i_reservedPayrollCycles = reservedPayrollCycles;
-        i_payrollInterval = payrollIntervalInDays * 1 days;
+        i_payrollInterval = payrollIntervalInSeconds;
         s_lastPayrollTimestamp = block.timestamp; // starts the clock at deployment
     }
 
