@@ -105,15 +105,15 @@ This section documents deliberate scope decisions and known tradeoffs, kept here
 
 **Production configuration** (30-day interval, 3 reserved cycles — realistic values for actual use):
 
-- Payroll: [`0xF9D4069037bAa86E9a145d7d2CaF3feD4528F096`](https://sepolia.etherscan.io/address/0xF9D4069037bAa86E9a145d7d2CaF3feD4528F096)
-- MockUSDC: [`0x2ECB0a2db5bD6E42D9943C3EE9Cf9A4e17a7A18e`](https://sepolia.etherscan.io/address/0x2ECB0a2db5bD6E42D9943C3EE9Cf9A4e17a7A18e)
+- Payroll: [`0xA15fBb6884b64A93B453628abd9b181D434D206A`](https://sepolia.etherscan.io/address/0xA15fBb6884b64A93B453628abd9b181D434D206A)
+- MockUSDC: [`0x44a0E5caF4a097583a9384c8Ef78403Ee2a2C1bc`](https://sepolia.etherscan.io/address/0x44a0E5caF4a097583a9384c8Ef78403Ee2a2C1bc)
 
-**Demo configuration** (1-day interval — exists purely so the full payroll cycle, including the interval guard, can be tested and demonstrated end-to-end without a real month-long wait):
+**Demo configuration** (10-second interval — exists purely so the full payroll cycle, including the interval guard, can be tested and demonstrated end-to-end without a real month-long wait):
 
-- Payroll: [`0x30cc1644fe776f95CFBf7c62c68cC69e1BDeE5E8`](https://sepolia.etherscan.io/address/0x30cc1644fe776f95CFBf7c62c68cC69e1BDeE5E8)
-- MockUSDC: [`0xE95cb6E641A7a6890DF341A0Fc90a483AB2f52B5`](https://sepolia.etherscan.io/address/0xE95cb6E641A7a6890DF341A0Fc90a483AB2f52B5)
+- Payroll: [`0x68B5Fc5B4B57dFBEE5d295BA25da36790aA68340`](https://sepolia.etherscan.io/address/0x68B5Fc5B4B57dFBEE5d295BA25da36790aA68340)
+- MockUSDC: [`0x6d8a78Bc479cF9C891b2417EC08c6C885e1713cB`](https://sepolia.etherscan.io/address/0x6d8a78Bc479cF9C891b2417EC08c6C885e1713cB)
 
-Both are real deployments on Sepolia, not simulations — every transaction is publicly verifiable.
+Both are real deployments on Sepolia, not simulations — every transaction is publicly verifiable. A full payroll cycle was executed end-to-end against the demo deployment on 2026-09-21: the contract was funded, two employees were registered, and `runPayroll()` paid both of them in a single transaction ([`0x2bca7683…`](https://sepolia.etherscan.io/tx/0x2bca7683da1fb69baf2f9eb8f6eeaece18c3d8e3cb96819ce7049647e8a1621d), 73,842 gas).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
