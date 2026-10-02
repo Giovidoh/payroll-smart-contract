@@ -14,10 +14,10 @@ deploy-anvil:
 # Sepolia targets use --slow: the deployer account is EIP-7702 delegated, and
 # nodes accept only one in-flight transaction from such accounts.
 
-# Demo instance for the thesis defense: one payroll every 120 s, triggered by
+# Demo instance for the thesis defense: one payroll every 60 s, triggered by
 # the CRE workflow every 30 s.
 deploy-sepolia-demo:
-	@PAYROLL_INTERVAL_SECONDS=120 forge script script/DeployPayroll.s.sol --rpc-url ${SEPOLIA_RPC_URL} --account sepoliaKey --broadcast --slow --verify --etherscan-api-key ${ETHERSCAN_API_KEY} -vvvv
+	@PAYROLL_INTERVAL_SECONDS=60 forge script script/DeployPayroll.s.sol --rpc-url ${SEPOLIA_RPC_URL} --account sepoliaKey --broadcast --slow --verify --etherscan-api-key ${ETHERSCAN_API_KEY} -vvvv
 
 # CRE relay: PAYROLL_ADDRESS and FORWARDER_ADDRESS are read from the environment.
 deploy-relay-sepolia:
